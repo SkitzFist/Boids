@@ -1,0 +1,10 @@
+BasedOnStyle: LLVM
+AlignAfterOpenBracket: Align
+BinPackParameters: false
+BreakBeforeBraces: Attach
+AllowAllParametersOfDeclarationOnNextLine: false
+IndentWidth: 4
+ColumnLimit: 0
+Cpp11BracedListStyle: true
+PointerAlignment: Left
+InsertTrailingNewline: true

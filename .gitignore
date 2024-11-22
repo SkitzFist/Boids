@@ -30,3 +30,6 @@
 *.exe
 *.out
 *.app
+
+build_desktop/
+build_web/
