@@ -52,19 +52,28 @@ if(NOT EMSCRIPTEN)
 endif()
 
 if(EMSCRIPTEN)
-  set(CMAKE_EXECUTABLE_SUFFIX ".html")
-  target_compile_options(${PROJECT_NAME} PRIVATE -msimd128 -msse4.1 -O3 -pthread)
-  set_target_properties(${PROJECT_NAME} PROPERTIES
-    SUFFIX ".html"
-    LINK_FLAGS "-O3 -lembind -s USE_GLFW=3 -s MAX_WEBGL_VERSION=2 -s MODULARIZE=1 -s EXPORT_ES6=1 -s ALLOW_MEMORY_GROWTH -D PLATFORM_WEB --shell-file ${CMAKE_SOURCE_DIR}/src/Shell.html"
-  )
+set(CMAKE_EXECUTABLE_SUFFIX ".html")
+
+# Compiler flags
+target_compile_options(${PROJECT_NAME} PRIVATE -msimd128 -msse4.1 -O3 -pthread)
+
+# Linker flags
+target_link_options(${PROJECT_NAME} PRIVATE -pthread)
+
+set_target_properties(${PROJECT_NAME} PROPERTIES
+  SUFFIX ".html"
+  LINK_FLAGS "-O3 -lembind -s USE_GLFW=3 -s MAX_WEBGL_VERSION=2 \
+              -s MODULARIZE=1 -s EXPORT_ES6=1 -s ALLOW_MEMORY_GROWTH \
+              -s USE_PTHREADS=1 -D PLATFORM_WEB \
+              --shell-file ${CMAKE_SOURCE_DIR}/src/Shell.html"
+)
 else()
   if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /W4 /O2)
   else()
-    target_compile_options(${PROJECT_NAME} PRIVATE -Wno-unused-variable)
-    set_target_properties(${PROJECT_NAME} PROPERTIES
-      LINK_FLAGS "-O3 -msse2"
-    )
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -mavx -msse2")
+  set_target_properties(${PROJECT_NAME} PROPERTIES
+      LINK_FLAGS "-O3 -mavx -msse2"
+  )
   endif()
 endif()
