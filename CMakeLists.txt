@@ -55,7 +55,7 @@ if(EMSCRIPTEN)
 set(CMAKE_EXECUTABLE_SUFFIX ".html")
 
 # Compiler flags
-target_compile_options(${PROJECT_NAME} PRIVATE -msimd128 -msse4.1 -O3 -pthread)
+target_compile_options(${PROJECT_NAME} PRIVATE -msimd128 -msse4.1 -O3 -pthread -std=c++20)
 
 # Linker flags
 target_link_options(${PROJECT_NAME} PRIVATE -pthread)
@@ -71,9 +71,9 @@ else()
   if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /W4 /O2)
   else()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -mavx -msse2")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -msse2")
   set_target_properties(${PROJECT_NAME} PROPERTIES
-      LINK_FLAGS "-O3 -mavx -msse2"
+      LINK_FLAGS "-O3 -msse2"
   )
   endif()
 endif()

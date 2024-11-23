@@ -56,9 +56,11 @@ int main() {
 
     emscripten_set_main_loop(webLoop, 0, 1);
 #else
-    createViewPort(false);
-    Simulation simulation;
-    simulation.run();
+    {
+        createViewPort(false);
+        Simulation simulation;
+        simulation.run();
+    }
     CloseWindow();
 #endif
 

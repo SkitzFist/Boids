@@ -1,3 +1,6 @@
+#ifndef BOIDS_LOG_H
+#define BOIDS_LOG_H
+
 #include <string>
 
 #include "raylib.h"
@@ -14,3 +17,5 @@ inline void vector2(std::string name, const Vector2& vec) {
 }
 
 } // namespace Log
+
+#endif
