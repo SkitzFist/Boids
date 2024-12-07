@@ -11,6 +11,10 @@ inline void info(const std::string& log) {
     TraceLog(LOG_INFO, log.c_str());
 }
 
+inline void error(const std::string& error) {
+    TraceLog(LOG_ERROR, error.c_str());
+}
+
 inline void vector2(std::string name, const Vector2& vec) {
     std::string log = name + ": " + std::to_string(vec.x) + " : " + std::to_string(vec.y);
     info(log);
