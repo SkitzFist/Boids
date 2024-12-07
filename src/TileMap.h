@@ -1,100 +1,138 @@
 #ifndef BOIDS_TILE_MAP_H
 #define BOIDS_TILE_MAP_H
 
+#include <array>
+#include <cmath>
+#include <immintrin.h>
+#include <memory>
+#include <mutex>
 #include <vector>
 
 #include "Log.h"
-#include "SimulationSettings.h"
+#include "Positions.h"
+#include "Settings.h"
 #include "ThreadPool.h"
+#include "ThreadVector.h"
 
-struct Result {
-    int mapIndex, entityId;
-};
-
-inline void update(int fromIndex, int toIndex, std::vector<int>& entityToMap, std::vector<Result>& results) {
-}
-
-inline void clearMap(int startIndex, int endIndex, std::vector<std::vector<int>>& map) {
-    for (int i = startIndex; i < endIndex; ++i) {
-        map[i].clear();
-    }
-}
-
-inline void cler(std::vector<int>& tile) {
-    tile.clear();
-}
+using Tiles = std::vector<std::vector<int>>;
 
 struct TileMap {
-    std::vector<std::vector<int>> map;
-    std::vector<int> entityToMap;
+    Tiles map;
+    std::vector<int> entityToTile;
+    std::vector<Tiles> threadMaps;
 
-    TileMap() {
+    TileMap(int numThreads) {
         map.resize(WorldSettings::TILE_COUNT);
-        entityToMap.resize(WorldSettings::ENTITY_COUNT);
+        entityToTile.resize(WorldSettings::ENTITY_COUNT);
+        threadMaps.resize(numThreads);
+        for (int i = 0; i < numThreads; ++i) {
+            threadMaps[i].resize(WorldSettings::TILE_COUNT);
+        }
     }
 
-    void update(ThreadPool& threadPool) {
-        return;
-        int numThreads = threadPool.numThreads;
-        int numTiles = static_cast<int>(map.size());
-
-        if (numThreads == 0) {
-            numThreads = 1;
-        }
+    void clear(ThreadPool& threadPool) {
+        int numThreads = ThreadSettings::THREAD_COUNT;
+        int numTiles = WorldSettings::TILE_COUNT;
 
         int tilesPerMap = numTiles / numThreads;
         int remainder = numTiles % numThreads;
 
-        std::atomic<int> tasksRemaining(0);
-
-        for (int i = 0; i < numThreads; ++i) {
-            int startIndex = i * tilesPerMap;
+        for (int thread = 0; thread < numThreads; ++thread) {
+            int startIndex = thread * tilesPerMap;
             int endIndex = startIndex + tilesPerMap;
 
-            if (i == numThreads - 1) {
+            if (thread == numThreads - 1) {
                 endIndex += remainder - 1;
             }
 
-            tasksRemaining.fetch_add(1, std::memory_order_relaxed);
-
-            threadPool.enqueue([startIndex, endIndex, &map = this->map, &tasksRemaining]() {
-                clearMap(startIndex, endIndex, map);
-                tasksRemaining.fetch_sub(1, std::memory_order_relaxed);
+            // clear tiles
+            threadPool.enqueue(thread, [startIndex, endIndex, &map = this->map]() {
+                for (int i = startIndex; i < endIndex; ++i) {
+                    map[i].clear();
+                }
+            });
+        }
+        for (int thread = 0; thread < numThreads; ++thread) {
+            threadPool.enqueue(thread, [thread, &threadTiles = this->threadMaps] {
+                for (int tile = 0; tile < WorldSettings::TILE_COUNT; ++tile) {
+                    threadTiles[thread][tile].clear();
+                }
             });
         }
 
-        // Wait for all tasks to complete
-        while (tasksRemaining.load(std::memory_order_relaxed) > 0) {
-            std::this_thread::yield();
-        }
+        // threadPool.awaitCompletion();
     }
 
-    // void update(ThreadPool& threadPool) {
-    //     // clear map
-    //     for (std::size_t i = 0; i < map.size(); ++i) {
-    //         map[i].clear();
-    //     }
+    void doEntityToTile(ThreadPool& threadPool, Positions& positions) {
+        int entitiesPerThread = WorldSettings::ENTITY_COUNT / ThreadSettings::THREAD_COUNT;
+        int remainder = WorldSettings::ENTITY_COUNT % ThreadSettings::THREAD_COUNT;
 
-    //     // re-add entitites
-    //     constexpr size_t simdWidth = 4;
-    //     size_t i = 0;
-    //     for (; i + simdWidth <= entityToMap.size(); i += simdWidth) {
-    //         __m128i indices = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&entityToMap[i]));
+        for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
+            int startindex = thread * entitiesPerThread;
+            int endIndex = thread + entitiesPerThread;
 
-    //         alignas(16) int indexArray[simdWidth];
-    //         _mm_store_si128(reinterpret_cast<__m128i*>(indexArray), indices);
+            if (thread == ThreadSettings::THREAD_COUNT - 1) {
+                endIndex += remainder - 1;
+            }
 
-    //         for (int j = 0; j < simdWidth; ++j) {
-    //             map[indexArray[j]].emplace_back(i + j);
-    //         }
-    //     }
+            threadPool.enqueue(thread, [&positions = positions, &entityToTile = this->entityToTile, startindex, endIndex]() {
+                int tileCol, tileRow, tileIndex;
 
-    //     // handle remainders
-    //     for (; i < entityToMap.size(); ++i) {
-    //         int index = entityToMap[i];
-    //         map[index].emplace_back(i);
-    //     }
-    // }
+                for (int i = startindex; i < endIndex; ++i) {
+                    tileCol = (int)positions.x[i] / WorldSettings::TILE_WIDTH;
+                    tileRow = (int)positions.y[i] / WorldSettings::TILE_HEIGHT;
+                    tileIndex = tileRow * WorldSettings::WORLD_COLUMNS + tileCol;
+                    entityToTile[i] = tileIndex;
+                }
+            });
+        }
+
+        // threadPool.awaitCompletion();
+    }
+
+    void rebuild(ThreadPool& threadPool) {
+
+        int entitiesPerThread = WorldSettings::ENTITY_COUNT / ThreadSettings::THREAD_COUNT;
+        int remainders = (WorldSettings::ENTITY_COUNT % ThreadSettings::THREAD_COUNT);
+
+        for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
+            int startEntity = thread * entitiesPerThread;
+            int endEntity = startEntity + entitiesPerThread;
+            if (thread == ThreadSettings::THREAD_COUNT - 1) {
+                endEntity += remainders - 1;
+            }
+
+            threadPool.enqueue(thread, [startEntity, endEntity, &threadMap = this->threadMaps[thread], &entityToTile = this->entityToTile] {
+                int tile = -1;
+                for (int entity = startEntity; entity < endEntity; ++entity) {
+                    tile = entityToTile[entity];
+                    threadMap[tile].emplace_back(entity);
+                }
+            });
+        }
+
+        // // insert into map
+        int tilesPerThread = WorldSettings::TILE_COUNT / ThreadSettings::THREAD_COUNT;
+        remainders = WorldSettings::TILE_COUNT % ThreadSettings::THREAD_COUNT;
+
+        for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
+            int startTile = thread * tilesPerThread;
+            int endTile = startTile + tilesPerThread;
+            if (thread == ThreadSettings::THREAD_COUNT - 1) {
+                endTile += remainders - 1;
+            }
+
+            threadPool.enqueue(thread, [startTile, endTile, &threadTiles = this->threadMaps, &tileMap = this->map]() {
+                for (int threadTile = 0; threadTile < threadTiles.size(); ++threadTile) {
+                    for (int tile = startTile; tile < endTile; ++tile) {
+                        tileMap[tile].insert(tileMap[tile].end(), threadTiles[threadTile][tile].begin(), threadTiles[threadTile][tile].end());
+                    }
+                }
+            });
+        }
+
+        // threadPool.awaitCompletion();
+    }
 };
 
 #endif

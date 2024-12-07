@@ -8,6 +8,12 @@
 #include "Simulation.h"
 #include "ViewPort.h"
 
+#include "CoreAffinity.h"
+
+#include "Tests/Test_SingleListMap.h"
+#include "Tests/Test_ThreadPool.h"
+#include "Tests/Test_ThreadVector.h"
+
 #if defined(PLATFORM_WEB)
 
 Simulation& getInstance() {
@@ -31,7 +37,6 @@ void webLoop() {
 }
 
 // bindings
-
 EMSCRIPTEN_BINDINGS(my_module) {
     emscripten::function("UpdateCanvasSize", &UpdateCanvasSize);
 }
@@ -39,6 +44,14 @@ EMSCRIPTEN_BINDINGS(my_module) {
 #endif
 
 int main() {
+
+    setAffinity(1);
+    setPriority();
+
+    // test_threadVector();
+    // SingelListMapTest();
+    // ThreadPoolTest();
+    // return 0;
 
 #if defined(PLATFORM_WEB)
     createViewPort(true);

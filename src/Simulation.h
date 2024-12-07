@@ -3,9 +3,11 @@
 
 #include "raylib.h"
 
-// #include "Positions.h"
+#include "Positions.h"
+#include "SingleListMap.h"
 #include "ThreadPool.h"
 #include "TileMap.h"
+#include "TileMapSimd.h"
 
 class Simulation {
   public:
@@ -26,10 +28,12 @@ class Simulation {
     Rectangle m_cameraRect;
 
     // spatial
-    TileMap m_tileMap;
+    // TileMap m_tileMap;
+    // TileMapSIMD m_tileMapSimd;
+    SingleListMap m_singleListMap;
 
     // Components
-    // Positions m_positions;
+    Positions m_positions;
 
     // textures
     Texture2D m_circleTexture;

@@ -3,11 +3,12 @@
 
 #include <vector>
 
-#include "SimulationSettings.h"
+#include "AlignedAllocator.h"
+#include "Settings.h"
 
 struct Positions {
-    std::vector<float> x;
-    std::vector<float> y;
+    AlignedFloatVector x;
+    AlignedFloatVector y;
 
     Positions() {
         x.resize(WorldSettings::ENTITY_COUNT);

@@ -14,4 +14,13 @@ inline constexpr const int TILE_COUNT = WORLD_ROWS * WORLD_COLUMNS;
 
 } // namespace WorldSettings
 
+namespace ThreadSettings {
+constexpr const int THREAD_COUNT = 5;
+
+constexpr const int ENTITIES_PER_THREAD = WorldSettings::ENTITY_COUNT / THREAD_COUNT;
+constexpr const int ENTITIES_REMAINDER = WorldSettings::ENTITY_COUNT % THREAD_COUNT;
+
+constexpr const int TILES_PER_THREAD = WorldSettings::TILE_COUNT / THREAD_COUNT;
+constexpr const int TILES_REMAINDER = WorldSettings::TILE_COUNT % THREAD_COUNT;
+} // namespace ThreadSettings
 #endif

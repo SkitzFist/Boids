@@ -3,16 +3,16 @@
 
 #include <iostream>
 
-#include "ThreadPoolLockFree.h"
+#include "ThreadPool.h"
 
 constexpr const int threads = 6;
 using namespace std::chrono_literals;
 void ThreadPoolTest() {
     std::cout << "Starting ThreadPool test\n";
-    ThreadPoolLockFree<threads> pool;
+    ThreadPool pool;
 
     for (int i = 0; i < threads; ++i) {
-        pool.enque(i, [i] {
+        pool.enqueue(i, [i] {
             std::cout << "Task " << i << "\n";
         });
     }
@@ -20,7 +20,7 @@ void ThreadPoolTest() {
     pool.await();
 
     for (int i = 0; i < threads; ++i) {
-        pool.enque(i, [i] {
+        pool.enqueue(i, [i] {
             std::cout << "Task " << i << "\n";
         });
     }

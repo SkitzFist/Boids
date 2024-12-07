@@ -1,17 +1,21 @@
 #include "Simulation.h"
 
-#include "raylib.h"
-
 #include "CameraMoveSystem.h"
 #include "Log.h"
-#include "SimulationSettings.h"
+#include "Settings.h"
 #include "ThreadPool.h"
+#include "raylib.h"
+#include <immintrin.h>
 
 inline void test(int id) {
     Log::info("id: " + std::to_string(id));
 }
 
-Simulation::Simulation() : m_threadPool(4), m_camera(), m_tileMap() {
+Simulation::Simulation() : m_threadPool(),
+                           m_camera(),
+                           /*m_tileMap(m_threadPool.numThreads)
+                           m_tileMapSimd(WorldSettings::TILE_COUNT, WorldSettings::ENTITY_COUNT)*/
+                           m_singleListMap() {
     m_camera.offset = {0.f, 0.f};
     m_camera.target = {0.f, 0.f};
     m_camera.rotation = 0.f;
@@ -25,7 +29,8 @@ Simulation::Simulation() : m_threadPool(4), m_camera(), m_tileMap() {
     UnloadRenderTexture(renderTexture);
 
     for (int i = 0; i < WorldSettings::ENTITY_COUNT; ++i) {
-        m_tileMap.entityToMap[i] = GetRandomValue(0, WorldSettings::TILE_COUNT - 1);
+        m_positions.x[i] = GetRandomValue(0, WorldSettings::WORLD_WIDTH - 32);
+        m_positions.y[i] = GetRandomValue(0, WorldSettings::WORLD_HEIGHT - 32);
     }
 }
 
@@ -68,8 +73,49 @@ void Simulation::update(float dt) {
     // set camera rect:
     m_cameraRect = {m_camera.target.x, m_camera.target.y, GetScreenWidth() / m_camera.zoom, GetScreenHeight() / m_camera.zoom};
 
-    // should update after entities moved
-    m_tileMap.update(m_threadPool);
+    // rebuild tile map
+
+    const int batchSize = 1000000;
+    const int entitiesPerThread = batchSize / ThreadSettings::THREAD_COUNT;
+    for (int batch = 0; batch < 10; ++batch) {
+        int startEntityBatch = batch * batch;
+
+        for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
+            int startEntity = startEntityBatch + (entitiesPerThread * thread);
+            int endEntity = startEntity + entitiesPerThread;
+
+            m_threadPool.enqueue(thread, [startEntity, endEntity, &entityToTile = this->m_singleListMap.entityToTile, &pos = this->m_positions] {
+                __m256 tileWidthVec = _mm256_set1_ps(WorldSettings::TILE_WIDTH);
+                __m256 tileHeightVec = _mm256_set1_ps(WorldSettings::TILE_HEIGHT);
+                __m256i worldColumnsVec = _mm256_set1_epi32(WorldSettings::WORLD_COLUMNS);
+                __m256 invTileWidthVec = _mm256_set1_ps(1.0f / WorldSettings::TILE_WIDTH);
+                __m256 invTileHeightVec = _mm256_set1_ps(1.0f / WorldSettings::TILE_HEIGHT);
+                int entity = startEntity;
+
+                for (; entity < endEntity - 8; entity += 8) {
+                    // preftch
+                    _mm_prefetch((const char*)&pos.x[entity + 16], _MM_HINT_T0);
+                    _mm_prefetch((const char*)&pos.y[entity + 16], _MM_HINT_T0);
+
+                    __m256 xPosVec = _mm256_loadu_ps(&pos.x[entity]);
+                    __m256 yPosVec = _mm256_loadu_ps(&pos.y[entity]);
+
+                    __m256 xMul = _mm256_mul_ps(xPosVec, invTileWidthVec);
+                    __m256 yMul = _mm256_mul_ps(yPosVec, invTileHeightVec);
+
+                    __m256i tileColVec = _mm256_cvttps_epi32(xMul);
+                    __m256i tileRowVec = _mm256_cvttps_epi32(yMul);
+
+                    __m256i tileRowMul = _mm256_mullo_epi32(tileRowVec, worldColumnsVec);
+                    __m256i tileIndexVec = _mm256_add_epi32(tileRowMul, tileColVec);
+
+                    _mm256_storeu_si256((__m256i*)&entityToTile[entity], tileIndexVec);
+                }
+            });
+        }
+        // m_threads.awaitCompletion();
+        m_threadPool.await();
+    }
 }
 
 void Simulation::render() const {
