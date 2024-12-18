@@ -34,6 +34,7 @@ class Simulation {
 
     // Components
     Positions m_positions;
+    PositionsI m_positionsI;
 
     // textures
     Texture2D m_circleTexture;

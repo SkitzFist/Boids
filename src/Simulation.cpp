@@ -31,6 +31,9 @@ Simulation::Simulation() : m_threadPool(),
     for (int i = 0; i < WorldSettings::ENTITY_COUNT; ++i) {
         m_positions.x[i] = GetRandomValue(0, WorldSettings::WORLD_WIDTH - 32);
         m_positions.y[i] = GetRandomValue(0, WorldSettings::WORLD_HEIGHT - 32);
+
+        m_positionsI.x[i] = GetRandomValue(0, WorldSettings::WORLD_WIDTH - 32);
+        m_positionsI.y[i] = GetRandomValue(0, WorldSettings::WORLD_HEIGHT - 32);
     }
 }
 
@@ -74,48 +77,7 @@ void Simulation::update(float dt) {
     m_cameraRect = {m_camera.target.x, m_camera.target.y, GetScreenWidth() / m_camera.zoom, GetScreenHeight() / m_camera.zoom};
 
     // rebuild tile map
-
-    const int batchSize = 1000000;
-    const int entitiesPerThread = batchSize / ThreadSettings::THREAD_COUNT;
-    for (int batch = 0; batch < 10; ++batch) {
-        int startEntityBatch = batch * batch;
-
-        for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
-            int startEntity = startEntityBatch + (entitiesPerThread * thread);
-            int endEntity = startEntity + entitiesPerThread;
-
-            m_threadPool.enqueue(thread, [startEntity, endEntity, &entityToTile = this->m_singleListMap.entityToTile, &pos = this->m_positions] {
-                __m256 tileWidthVec = _mm256_set1_ps(WorldSettings::TILE_WIDTH);
-                __m256 tileHeightVec = _mm256_set1_ps(WorldSettings::TILE_HEIGHT);
-                __m256i worldColumnsVec = _mm256_set1_epi32(WorldSettings::WORLD_COLUMNS);
-                __m256 invTileWidthVec = _mm256_set1_ps(1.0f / WorldSettings::TILE_WIDTH);
-                __m256 invTileHeightVec = _mm256_set1_ps(1.0f / WorldSettings::TILE_HEIGHT);
-                int entity = startEntity;
-
-                for (; entity < endEntity - 8; entity += 8) {
-                    // preftch
-                    _mm_prefetch((const char*)&pos.x[entity + 16], _MM_HINT_T0);
-                    _mm_prefetch((const char*)&pos.y[entity + 16], _MM_HINT_T0);
-
-                    __m256 xPosVec = _mm256_loadu_ps(&pos.x[entity]);
-                    __m256 yPosVec = _mm256_loadu_ps(&pos.y[entity]);
-
-                    __m256 xMul = _mm256_mul_ps(xPosVec, invTileWidthVec);
-                    __m256 yMul = _mm256_mul_ps(yPosVec, invTileHeightVec);
-
-                    __m256i tileColVec = _mm256_cvttps_epi32(xMul);
-                    __m256i tileRowVec = _mm256_cvttps_epi32(yMul);
-
-                    __m256i tileRowMul = _mm256_mullo_epi32(tileRowVec, worldColumnsVec);
-                    __m256i tileIndexVec = _mm256_add_epi32(tileRowMul, tileColVec);
-
-                    _mm256_storeu_si256((__m256i*)&entityToTile[entity], tileIndexVec);
-                }
-            });
-        }
-        // m_threads.awaitCompletion();
-        m_threadPool.await();
-    }
+    m_singleListMap.rebuildSimd(m_threadPool, m_positions); // 5.9 - 6.2 k fps || 188 fps
 }
 
 void Simulation::render() const {

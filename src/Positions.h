@@ -16,4 +16,14 @@ struct Positions {
     }
 };
 
+struct PositionsI {
+    AlignedInt32Vector x;
+    AlignedInt32Vector y;
+
+    PositionsI() {
+        x.resize(WorldSettings::ENTITY_COUNT);
+        y.resize(WorldSettings::ENTITY_COUNT);
+    }
+};
+
 #endif
