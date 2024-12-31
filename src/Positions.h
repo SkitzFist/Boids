@@ -26,4 +26,14 @@ struct PositionsI {
     }
 };
 
+struct PositionsI16 {
+    std::vector<uint16_t> x;
+    std::vector<uint16_t> y;
+
+    PositionsI16() {
+        x.resize(WorldSettings::ENTITY_COUNT);
+        y.resize(WorldSettings::ENTITY_COUNT);
+    }
+};
+
 #endif
