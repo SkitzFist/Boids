@@ -14,17 +14,31 @@
 #include "Settings.h"
 #include "ThreadPool.h"
 
+#include <algorithm>
+#include <execution>
+
+#include "Log.h"
+
 struct SingleListMap {
-    AlignedInt32Vector entityToTile;
+    std::vector<int> entityToTile;
+    std::vector<int> entityToTileCopy;
     std::vector<int> tileToEntity;
     std::vector<int> nrOfEntitiesAtTile;
     std::vector<int> tileStartIndex;
 
+    std::vector<std::vector<int>> localCounts;
+
     SingleListMap() {
         entityToTile.resize(WorldSettings::ENTITY_COUNT);
+        entityToTileCopy.resize(WorldSettings::ENTITY_COUNT);
         tileToEntity.resize(WorldSettings::ENTITY_COUNT);
         nrOfEntitiesAtTile.resize(WorldSettings::TILE_COUNT);
         tileStartIndex.resize(WorldSettings::TILE_COUNT);
+
+        localCounts.resize(ThreadSettings::THREAD_COUNT);
+        for (int i = 0; i < localCounts.size(); ++i) {
+            localCounts[i].resize(WorldSettings::TILE_COUNT);
+        }
     }
 
 #if defined(EMSCRIPTEN)
@@ -34,9 +48,9 @@ struct SingleListMap {
             startEntity = ThreadSettings::ENTITIES_PER_THREAD * thread;
             endEntity = startEntity + ThreadSettings::ENTITIES_PER_THREAD;
 
-            if (thread == ThreadSettings::THREAD_COUNT - 1) {
-                endEntity += ThreadSettings::ENTITIES_REMAINDER - 1;
-            }
+            // if (thread == ThreadSettings::THREAD_COUNT - 1) {
+            //     endEntity += ThreadSettings::ENTITIES_REMAINDER - 1;
+            // }
 
             pool.enqueue(thread, [&pos, &entityToTile = this->entityToTile, startEntity, endEntity, thread] {
                 __m128 tileWidthVec = _mm_set_ps1(WorldSettings::TILE_WIDTH);
@@ -72,17 +86,14 @@ struct SingleListMap {
 
 #else
 
-    void rebuildSimd(ThreadPool& pool, const Positions& pos) {
+    void rebuild(ThreadPool& pool, const Positions& pos) {
+        // build entityToTile
         int startEntity, endEntity;
         for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
             startEntity = ThreadSettings::ENTITIES_PER_THREAD * thread;
             endEntity = startEntity + ThreadSettings::ENTITIES_PER_THREAD;
 
-            if (thread == ThreadSettings::THREAD_COUNT - 1) {
-                endEntity += ThreadSettings::ENTITIES_REMAINDER - 1;
-            }
-
-            pool.enqueue(thread, [&pos, &entityToTile = this->entityToTile, startEntity, endEntity, thread] {
+            pool.enqueue(thread, [&pos, &entityToTile = this->entityToTile, &localCounts = this->localCounts[thread], startEntity, endEntity, thread] {
                 __m256 tileWidthVec = _mm256_set1_ps(WorldSettings::TILE_WIDTH);
                 __m256 tileHeightVec = _mm256_set1_ps(WorldSettings::TILE_HEIGHT);
                 __m256i worldColumnsVec = _mm256_set1_epi32(WorldSettings::WORLD_COLUMNS);
@@ -111,6 +122,30 @@ struct SingleListMap {
                 }
             });
         }
+
+        // // clean local count on main thread while threads build entityToTile
+        // for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
+        //     memset(localCounts[thread].data(), 0, WorldSettings::TILE_COUNT * sizeof(int));
+        // }
+
+        pool.await();
+
+        // memcpy(entityToTileCopy.data(), entityToTile.data(), sizeof(int) * WorldSettings::ENTITY_COUNT);
+
+        // std::sort(std::execution::par, entityToTileCopy.begin(), entityToTileCopy.end());
+
+        // // set entity count per tile
+        // for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
+        //     startEntity = ThreadSettings::ENTITIES_PER_THREAD * thread;
+        //     endEntity = startEntity + ThreadSettings::ENTITIES_PER_THREAD;
+        //     pool.enqueue(thread, [&localCount = this->localCounts[thread], &entityToTile = this->entityToTile, startEntity, endEntity] {
+        //         int tileIndex;
+        //         for (int entity = startEntity; entity < endEntity; ++entity) {
+        //             tileIndex = entityToTile[entity];
+        //             ++localCount[tileIndex];
+        //         }
+        //     });
+        // }
 
         pool.await();
     }
