@@ -3,11 +3,20 @@
 
 #include "raylib.h"
 
-#include "Positions.h"
-#include "SingleListMap.h"
 #include "ThreadPool.h"
-#include "TileMap.h"
+
+// spatial
+#include "MortonCodeMap.h"
+#include "SingleListMap.h"
+#include "ThreadMap.h"
 #include "TileMapSimd.h"
+
+// components
+#include "Positions.h"
+#include "Velocities.h"
+
+// util
+#include "Timer.h"
 
 class Simulation {
   public:
@@ -30,7 +39,10 @@ class Simulation {
     // spatial
     // TileMap m_tileMap;
     // TileMapSIMD m_tileMapSimd;
-    SingleListMap m_singleListMap;
+    TileMap m_tileMap;
+    std::vector<int> m_entitiesInRange;
+    MortonMap m_mortonMap;
+    ThreadMap m_threadMap;
 
     // Components
     Positions m_positions;
@@ -38,6 +50,9 @@ class Simulation {
 
     // textures
     Texture2D m_circleTexture;
+
+    // Test util
+    Timer m_timer;
 
   private:
     void gameLoop();

@@ -23,21 +23,18 @@ class ThreadVector {
         m_size = 0;
     }
 
-    // Resets the object to a zeroed state
     void reset() {
-        delete[] m_data; // Safely releases memory
+        delete[] m_data;
         m_data = nullptr;
         m_size = 0;
         m_capacity = 0;
     }
 
-    // Copy constructor
     ThreadVector(const ThreadVector<T>& other)
         : m_data(nullptr), m_size(0), m_capacity(0) {
         copy_from(other);
     }
 
-    // Copy assignment operator
     ThreadVector<T>& operator=(const ThreadVector<T>& other) {
         if (this != &other) {
             reset();
@@ -46,13 +43,11 @@ class ThreadVector {
         return *this;
     }
 
-    // Move constructor
     ThreadVector(ThreadVector<T>&& other) noexcept
         : m_data(nullptr), m_size(0), m_capacity(0) {
         move_from(std::move(other));
     }
 
-    // Move assignment operator
     ThreadVector<T>& operator=(ThreadVector<T>&& other) noexcept {
         if (this != &other) {
             reset();

@@ -10,4 +10,5 @@ void createViewPort(bool isWeb) {
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(screenWidth, screenHeight, "Boids");
+    // SetTargetFPS(60);
 }
