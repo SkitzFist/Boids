@@ -10,6 +10,7 @@
 
 #include "CoreAffinity.h"
 
+#include "Tests/SimdSortTest.h"
 #include "Tests/Test_SingleListMap.h"
 #include "Tests/Test_ThreadPool.h"
 #include "Tests/Test_ThreadVector.h"
@@ -51,7 +52,8 @@ int main() {
     // test_threadVector();
     // SingelListMapTest();
     // ThreadPoolTest();
-    // return 0;
+    simdSortingTest();
+    return 0;
 
 #if defined(PLATFORM_WEB)
     createViewPort(true);

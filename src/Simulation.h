@@ -13,7 +13,6 @@
 
 // components
 #include "Positions.h"
-#include "Velocities.h"
 
 // util
 #include "Timer.h"
@@ -52,7 +51,8 @@ class Simulation {
     Texture2D m_circleTexture;
 
     // Test util
-    Timer m_timer;
+    Timer m_buildTimer;
+    Timer m_searchTimer;
 
   private:
     void gameLoop();

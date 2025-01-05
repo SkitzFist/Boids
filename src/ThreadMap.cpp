@@ -5,12 +5,12 @@
 #include <immintrin.h>
 #include <vector>
 
-inline void radixSort(std::vector<uint16_t>& arr, std::vector<int>& secondary, ThreadPool& threadPool) {
-    const size_t n = arr.size();
-    const int threadCount = ThreadSettings::THREAD_COUNT;
+// debug
+#include "Log.h"
 
-    std::vector<uint16_t> tempPrimary(n);
-    std::vector<int> tempSecondary(n);
+inline void radixSort(ThreadMap& map, ThreadPool& threadPool) {
+    const size_t n = map.tileMap.size();
+    const int threadCount = ThreadSettings::THREAD_COUNT;
 
     // Shared histograms for each thread
     std::vector<std::vector<uint32_t>> threadHistogramsLow(threadCount, std::vector<uint32_t>(256, 0));
@@ -20,8 +20,8 @@ inline void radixSort(std::vector<uint16_t>& arr, std::vector<int>& secondary, T
         auto& localLow = threadHistogramsLow[threadId];
         auto& localHigh = threadHistogramsHigh[threadId];
         for (size_t i = start; i < end; ++i) {
-            uint8_t lowByte = arr[i] & 0xFF;
-            uint8_t highByte = (arr[i] >> 8) & 0xFF;
+            uint8_t lowByte = map.tileMap[i] & 0xFF;
+            uint8_t highByte = (map.tileMap[i] >> 8) & 0xFF;
             localLow[lowByte]++;
             localHigh[highByte]++;
         }
@@ -38,11 +38,11 @@ inline void radixSort(std::vector<uint16_t>& arr, std::vector<int>& secondary, T
 
     auto sortPhase = [&](std::vector<uint32_t>& histogram, size_t start, size_t end, bool useLowBits) {
         for (size_t i = start; i < end; ++i) {
-            uint16_t val = arr[i];
+            uint16_t val = map.tileMap[i];
             uint8_t digit = useLowBits ? (val & 0xFF) : ((val >> 8) & 0xFF);
             size_t pos = histogram[digit]++;
-            tempPrimary[pos] = val;
-            tempSecondary[pos] = secondary[i]; // Mimic operation on secondary vector
+            map.tmpTile[pos] = val;
+            map.tmpId[pos] = map.idMap[i]; // Mimic operation on secondary vector
         }
     };
 
@@ -83,8 +83,8 @@ inline void radixSort(std::vector<uint16_t>& arr, std::vector<int>& secondary, T
     threadPool.await();
 
     // Swap primary and secondary arrays for the next pass
-    std::swap(arr, tempPrimary);
-    std::swap(secondary, tempSecondary);
+    std::swap(map.tileMap, map.tmpTile);
+    std::swap(map.idMap, map.tmpId);
 
     // Sort by upper 8 bits
     for (int i = 0; i < threadCount; ++i) {
@@ -97,24 +97,25 @@ inline void radixSort(std::vector<uint16_t>& arr, std::vector<int>& secondary, T
     threadPool.await();
 
     // Final swap to restore sorted order in the primary array
-    std::swap(arr, tempPrimary);
-    std::swap(secondary, tempSecondary);
+    std::swap(map.tileMap, map.tmpTile);
+    std::swap(map.idMap, map.tmpId);
 }
 
-void init(ThreadMap& map) {
-    map.idMap.resize(WorldSettings::ENTITY_COUNT);
-    map.tileMap.resize(WorldSettings::ENTITY_COUNT);
-    map.tmpMap.resize(WorldSettings::ENTITY_COUNT);
+void init(ThreadMap& map, const int count) {
+    map.idMap.resize(count);
+    map.tileMap.resize(count);
+    map.tmpTile.resize(count);
+    map.tmpId.resize(count);
 }
 
-void rebuild(std::vector<uint16_t>& tileMap, std::vector<int>& idMap, ThreadPool& pool, Positions& pos) {
+void rebuild(ThreadMap& map, ThreadPool& pool, Positions& pos) {
     // build entityToTile
     int startEntity, endEntity;
     for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
         startEntity = ThreadSettings::ENTITIES_PER_THREAD * thread;
         endEntity = startEntity + ThreadSettings::ENTITIES_PER_THREAD;
 
-        pool.enqueue(thread, [&pos, &tileMap = tileMap, startEntity, endEntity, thread] {
+        pool.enqueue(thread, [&pos, &tileMap = map.tileMap, startEntity, endEntity, thread] {
             __m256 tileWidthVec = _mm256_set1_ps(WorldSettings::TILE_WIDTH);
             __m256 tileHeightVec = _mm256_set1_ps(WorldSettings::TILE_HEIGHT);
             __m256i worldColumnsVec = _mm256_set1_epi32(WorldSettings::WORLD_COLUMNS);
@@ -134,7 +135,7 @@ void rebuild(std::vector<uint16_t>& tileMap, std::vector<int>& idMap, ThreadPool
             __m256i packedIndices;
 
             int entity = startEntity;
-            for (; entity < endEntity - 16; entity += 16) { // Process 16 elements at a time now
+            for (; entity < endEntity - 16; entity += 16) {
                 // Prefetch next batch
                 _mm_prefetch((const char*)&pos.x[entity + 32], _MM_HINT_T0);
                 _mm_prefetch((const char*)&pos.y[entity + 32], _MM_HINT_T0);
@@ -172,7 +173,8 @@ void rebuild(std::vector<uint16_t>& tileMap, std::vector<int>& idMap, ThreadPool
                 _mm256_storeu_si256((__m256i*)&tileMap[entity], packedIndices);
             }
 
-            // Handle remaining elements
+            // reset id map
+            //  Handle remaining elements
             for (; entity < endEntity; ++entity) {
                 float x = pos.x[entity];
                 float y = pos.y[entity];
@@ -184,7 +186,7 @@ void rebuild(std::vector<uint16_t>& tileMap, std::vector<int>& idMap, ThreadPool
             }
         });
 
-        pool.enqueue(thread, [&idMap, startEntity, endEntity] {
+        pool.enqueue(thread, [&idMap = map.idMap, startEntity, endEntity] {
             __m256i sequence = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
             __m256i increment = _mm256_set1_epi32(8);
             __m256i startOffset = _mm256_set1_epi32(startEntity);
@@ -204,8 +206,18 @@ void rebuild(std::vector<uint16_t>& tileMap, std::vector<int>& idMap, ThreadPool
     }
 
     pool.await();
+
+    radixSort(map, pool);
 }
 
-void sort(ThreadMap& map, ThreadPool& pool) {
-    radixSort(map.tileMap, map.idMap, pool);
+bool isSorted(ThreadMap& map) {
+    bool isSorted = true;
+    for (int i = 0; i < WorldSettings::ENTITY_COUNT - 1; ++i) {
+        Log::info(std::to_string(map.tileMap[i]));
+        if (map.tileMap[i] > map.tileMap[i + 1]) {
+            isSorted = false;
+        }
+    }
+
+    return isSorted;
 }

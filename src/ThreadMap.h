@@ -10,14 +10,17 @@
 
 struct ThreadMap {
     std::vector<int> idMap;
+    std::vector<int> tmpId;
+
     std::vector<uint16_t> tileMap;
-    std::vector<uint16_t> tmpMap;
+    std::vector<uint16_t> tmpTile;
 };
 
-void init(ThreadMap& map);
+void init(ThreadMap& map, const int count);
 
 // rebuild
-void rebuild(std::vector<uint16_t>& tileMap, std::vector<int>& idMap, ThreadPool& pool, Positions& pos);
+void rebuild(ThreadMap& map, ThreadPool& pool, Positions& pos);
 void sort(ThreadMap& map, ThreadPool& pool);
+bool isSorted(ThreadMap& map);
 
 #endif

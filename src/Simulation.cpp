@@ -18,7 +18,7 @@ inline void test(int id) {
 
 Simulation::Simulation() : m_threadPool(),
                            m_camera(),
-                           m_tileMap() {
+                           m_threadMap() {
     m_camera.offset = {0.f, 0.f};
     m_camera.target = {0.f, 0.f};
     m_camera.rotation = 0.f;
@@ -39,13 +39,13 @@ Simulation::Simulation() : m_threadPool(),
         m_positionsI.y[i] = GetRandomValue(0, WorldSettings::WORLD_HEIGHT - 16);
     }
 
-    init(m_tileMap, WorldSettings::ENTITY_COUNT, m_threadPool, m_positions);
+    // init(m_tileMap, WorldSettings::ENTITY_COUNT, m_threadPool, m_positions);
 
     // init(m_mortonMap, WorldSettings::ENTITY_COUNT);
     // encode(m_mortonMap, m_threadPool, m_positionsI);
     // sort(m_mortonMap.entriesPtr, m_mortonMap.ids);
 
-    init(m_threadMap);
+    init(m_threadMap, WorldSettings::ENTITY_COUNT);
 }
 
 Simulation::~Simulation() {
@@ -129,12 +129,13 @@ void Simulation::update(float dt) {
     // search(m_tileMap, m_threadPool, m_cameraRect, m_entitiesInRange);
     // m_timer.stop();
 
-    // threadMap
-    rebuild(m_threadMap.tileMap, m_threadMap.idMap, m_threadPool, m_positions);
+    // // threadMap
+    m_buildTimer.begin();
+    rebuild(m_threadMap, m_threadPool, m_positions);
+    m_buildTimer.stop();
 
-    m_timer.begin();
-    sort(m_threadMap, m_threadPool);
-    m_timer.stop();
+    // morton Map
+    // encode(m_mortonMap, m_threadPool, m_positionsI);
 }
 
 void Simulation::render() const {
@@ -183,7 +184,8 @@ void Simulation::render() const {
     DrawText(("FPS: " + std::to_string(GetFPS())).c_str(), 10, 10, 20, BLACK);
     DrawText(("Entities: " + std::to_string(WorldSettings::ENTITY_COUNT)).c_str(), 10, 30, 20, BLACK);
     DrawText(("Drawn: " + std::to_string(m_entitiesInRange.size())).c_str(), 10, 50, 20, BLACK);
-    DrawText(("SearchTime: " + std::to_string(m_timer.lastDuration)).c_str(), 10, 70, 20, BLACK);
+    DrawText(("BuildTime: " + std::to_string(m_buildTimer.lastDuration)).c_str(), 10, 70, 20, BLACK);
+    DrawText(("SearchTime: " + std::to_string(m_searchTimer.lastDuration)).c_str(), 10, 90, 20, BLACK);
 
     EndDrawing();
 }

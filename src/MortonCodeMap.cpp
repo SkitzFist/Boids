@@ -38,7 +38,8 @@ void encode(MortonMap& map, ThreadPool& pool, const PositionsI& pos) {
 
     pool.await();
 
-    memcpy(map.entriesCpy.data(), map.entries.data(), map.entries.size() * sizeof(uint32_t));
+    // memcpy(map.entriesCpy.data(), map.entries.data(), map.entries.size() * sizeof(uint32_t));
+    // sort(map.entriesCpy, map.ids);
 }
 
 //////////////////////////
@@ -84,7 +85,7 @@ void sort(std::vector<uint32_t*>& entries, std::vector<int>& ids) {
 }
 
 void sort(std::vector<uint32_t>& entries, std::vector<int>& ids) {
-    // std::sort(std::execution::par, entries.begin(), entries.end());
+    std::sort(std::execution::par, entries.begin(), entries.end());
 }
 
 //////////////////////////
