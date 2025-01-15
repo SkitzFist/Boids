@@ -81,7 +81,7 @@ class ThreadPool {
 
     void worker(const int thread) {
         // Optional: Set thread affinity if needed
-        setAffinity(thread + 2);
+        setAffinity(thread + 1);
 
         while (true) {
             std::function<void()> task;

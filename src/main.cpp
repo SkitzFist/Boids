@@ -46,8 +46,8 @@ EMSCRIPTEN_BINDINGS(my_module) {
 
 int main() {
 
-    setAffinity(1);
-    setPriority();
+    setAffinity(0);
+    // setPriority();
 
     // test_threadVector();
     // SingelListMapTest();
