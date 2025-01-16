@@ -5,6 +5,14 @@
 #include <iostream>
 #include <vector>
 
+/*
+    I have a gut feeling it's possible to simd sort a register in 5-6 steps.
+    Which is less then what known mathematics say. I've spent two weeks on this now,
+    but havn't solved it yet, it feels like I'm getting closer though.
+    But I'll have to leave it for now and return on a later date.
+    TODO: Move this out to it's own repo.
+*/
+
 void print_m256i(__m256i reg) {
     alignas(32) int vals[8];
     _mm256_store_si256((__m256i*)vals, reg);
@@ -12,17 +20,6 @@ void print_m256i(__m256i reg) {
         std::cout << vals[i] << " ";
     }
     std::cout << std::endl;
-}
-
-inline void swapIfGreater(__m256i& a, __m256i& idx, __m256i idx_shift) {
-    __m256i idx_original = _mm256_set_epi32(7, 6, 5, 4, 3, 2, 1, 0);
-    __m256i b = _mm256_permutevar8x32_epi32(a, idx);
-    __m256i comp = _mm256_cmpgt_epi32(a, b);
-    comp = _mm256_permutevar8x32_epi32(comp, idx_shift);
-
-    __m256i idx_final = _mm256_blendv_epi8(idx_original, idx, comp);
-
-    a = _mm256_permutevar8x32_epi32(a, idx_final);
 }
 
 constexpr int createMask(int a, int b, int c, int d, int e, int f, int g, int h) {
@@ -43,67 +40,82 @@ inline void doStep(__m256i& a, __m256i& b, __m256i& idx, int& blend) {
     a = _mm256_blend_epi32(min, max, blend);
 }
 
+/*
+    __m256i idxPairOdd = _mm256_set_epi32(7, 5, 6, 3, 4, 1, 2, 0);
+    constexpr const int blendPairOdd = createMask(0, 0, 1, 0, 1, 0, 1, 1);
+*/
+
 __m256i sortRegister(__m256i reg) {
     // print_m256i(reg);
 
-    __m256i idxLocal = _mm256_set_epi32(4, 5, 6, 7, 0, 1, 2, 3);
-    int blendLocal = createMask(0, 0, 1, 1, 0, 0, 1, 1);
+    // 1,3
+    __m256i idxLocalLong = _mm256_set_epi32(4, 5, 6, 7, 0, 1, 2, 3);
+    constexpr int blendLocal = createMask(0, 0, 1, 1, 0, 0, 1, 1);
 
-    __m256i idxInterOdd = _mm256_set_epi32(6, 7, 2, 3, 4, 5, 0, 1);
-    int blendInterOdd = createMask(0, 1, 0, 0, 1, 1, 0, 1);
+    // 2,4
+    __m256i idxInter = _mm256_set_epi32(6, 7, 2, 3, 4, 5, 0, 1);
+    constexpr int blendInter = createMask(0, 1, 0, 0, 1, 1, 0, 1);
 
-    __m256i idxInterEven = _mm256_set_epi32(6, 7, 3, 2, 5, 4, 0, 1);
-    int blendInterEven = createMask(0, 1, 0, 0, 1, 1, 0, 1);
+    // 5
+    __m256i idxLocalShort = _mm256_set_epi32(7, 5, 6, 3, 4, 1, 2, 0);
+    constexpr const int blendLocalShort = createMask(0, 0, 1, 0, 1, 0, 1, 1);
 
-    __m256i idxNeighbour = _mm256_set_epi32(6, 7, 4, 5, 2, 3, 0, 1);
-    int blendNeighbour = createMask(0, 1, 0, 1, 0, 1, 0, 1);
+    // 6
+    __m256i idxPair = _mm256_set_epi32(6, 7, 4, 5, 2, 3, 0, 1);
+    constexpr const int blendPair = createMask(0, 1, 0, 1, 0, 1, 0, 1);
 
     // 1
-    __m256i b = _mm256_permutevar8x32_epi32(reg, idxLocal);
+    __m256i b = _mm256_permutevar8x32_epi32(reg, idxLocalLong);
     __m256i min = _mm256_min_epi32(reg, b);
     __m256i max = _mm256_max_epi32(reg, b);
     reg = _mm256_blend_epi32(min, max, blendLocal);
-    std::cout << "---1---\n";
-    print_m256i(reg);
+    // std::cout << "---1---\n";
+    // print_m256i(reg);
 
     // 2
-    b = _mm256_permutevar8x32_epi32(reg, idxInterOdd);
+    b = _mm256_permutevar8x32_epi32(reg, idxInter);
     min = _mm256_min_epi32(reg, b);
     max = _mm256_max_epi32(reg, b);
-    reg = _mm256_blend_epi32(min, max, blendInterOdd);
-    std::cout << "---2---\n";
-    print_m256i(reg);
+    reg = _mm256_blend_epi32(min, max, blendInter);
+    // std::cout << "---2---\n";
+    // print_m256i(reg);
 
     // 3
-    b = _mm256_permutevar8x32_epi32(reg, idxLocal);
+    b = _mm256_permutevar8x32_epi32(reg, idxLocalLong);
     min = _mm256_min_epi32(reg, b);
     max = _mm256_max_epi32(reg, b);
     reg = _mm256_blend_epi32(min, max, blendLocal);
-    std::cout << "---3---\n";
-    print_m256i(reg);
+    // std::cout << "---3---\n";
+    // print_m256i(reg);
 
     // 4
-    b = _mm256_permutevar8x32_epi32(reg, idxInterEven);
+    b = _mm256_permutevar8x32_epi32(reg, idxInter);
     min = _mm256_min_epi32(reg, b);
     max = _mm256_max_epi32(reg, b);
-    reg = _mm256_blend_epi32(min, max, blendInterEven);
-    std::cout << "---4---\n";
-    print_m256i(reg);
+    reg = _mm256_blend_epi32(min, max, blendInter);
 
     // 5
-    b = _mm256_permutevar8x32_epi32(reg, idxNeighbour);
+    b = _mm256_permutevar8x32_epi32(reg, idxLocalShort);
     min = _mm256_min_epi32(reg, b);
     max = _mm256_max_epi32(reg, b);
-    reg = _mm256_blend_epi32(min, max, blendNeighbour);
-    std::cout << "---5---\n";
-    print_m256i(reg);
+    reg = _mm256_blend_epi32(min, max, blendLocalShort);
+    // std::cout << "---4---\n";
+    // print_m256i(reg);
+
+    // 6
+    b = _mm256_permutevar8x32_epi32(reg, idxPair);
+    min = _mm256_min_epi32(reg, b);
+    max = _mm256_max_epi32(reg, b);
+    reg = _mm256_blend_epi32(min, max, blendPair);
+    // std::cout << "---5---\n";
+    // print_m256i(reg);
 
     return reg;
 }
 
 void simdSort(std::vector<int, AlignedAllocator<int, 32>>& vec) {
     for (std::size_t i = 0; i < vec.size() - 7; i += 8) {
-        std::cout << "\n\n";
+        // std::cout << "\n\n";
         _mm256_store_si256((__m256i*)&vec[i], sortRegister(_mm256_load_si256((__m256i*)&vec[i])));
     }
 

@@ -42,20 +42,20 @@ void simdSortingTest() {
     simdSort(vec);
     duration = timer.getDuration();
     // print(vec, original);
-    // std::cout << "Sorted completed in: " << duration << "\n\n";
-    // int intraRegisterFails = 0;
-    // for (int i = 0; i < vec.size(); i += 8) {
-    //     for (int j = i; j < i + 7; ++j) { // Check within the register
-    //         if (vec[j] > vec[j + 1]) {
-    //             ++intraRegisterFails;
-    //             for (int k = i; k < i + 8; ++k) {
-    //                 std::cout << "[" << k << "]: " << vec[k] << "  :  " << original[k] << "\n";
-    //             }
-    //             return;
-    //         }
-    //     }
-    // }
-    // std::cout << "Total intra-register failures: " << intraRegisterFails << "\n";
+    std::cout << "Sorted completed in: " << duration << "\n\n";
+    int intraRegisterFails = 0;
+    for (int i = 0; i < vec.size(); i += 8) {
+        for (int j = i; j < i + 7; ++j) { // Check within the register
+            if (vec[j] > vec[j + 1]) {
+                ++intraRegisterFails;
+                for (int k = i; k < i + 8; ++k) {
+                    std::cout << "[" << k << "]: " << vec[k] << "  :  " << original[k] << "\n";
+                }
+                return;
+            }
+        }
+    }
+    std::cout << "Total intra-register failures: " << intraRegisterFails << "\n";
 }
 
 #endif
