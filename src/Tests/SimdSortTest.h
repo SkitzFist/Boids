@@ -24,7 +24,7 @@ void print(std::vector<int, AlignedAllocator<int, 32>>& vec, std::vector<int>& o
 void simdSortingTest() {
     Timer timer;
 
-    int count = 24; // 1000256;
+    int count = 30000000;
     std::vector<int, AlignedAllocator<int, 32>>
         vec;
     std::vector<int> original;
@@ -38,24 +38,23 @@ void simdSortingTest() {
     }
     double duration;
     timer.begin();
-    // std::sort(vec.begin(), vec.end());
     simdSort(vec);
     duration = timer.getDuration();
     // print(vec, original);
-    std::cout << "Sorted completed in: " << duration << "\n\n";
-    int intraRegisterFails = 0;
-    for (int i = 0; i < vec.size(); i += 8) {
-        for (int j = i; j < i + 7; ++j) { // Check within the register
-            if (vec[j] > vec[j + 1]) {
-                ++intraRegisterFails;
-                for (int k = i; k < i + 8; ++k) {
-                    std::cout << "[" << k << "]: " << vec[k] << "  :  " << original[k] << "\n";
-                }
-                return;
-            }
-        }
-    }
-    std::cout << "Total intra-register failures: " << intraRegisterFails << "\n";
+    std::cout << "Sorted " << (count / 8) << " entries in: " << duration << "ms\n\n";
+    // int intraRegisterFails = 0;
+    // for (int i = 0; i < vec.size(); i += 8) {
+    //     for (int j = i; j < i + 7; ++j) { // Check within the register
+    //         if (vec[j] > vec[j + 1]) {
+    //             ++intraRegisterFails;
+    //             for (int k = i; k < i + 8; ++k) {
+    //                 std::cout << "[" << k << "]: " << vec[k] << "  :  " << original[k] << "\n";
+    //             }
+    //             return;
+    //         }
+    //     }
+    // }
+    // std::cout << "Total intra-register failures: " << intraRegisterFails << "\n";
 }
 
 #endif

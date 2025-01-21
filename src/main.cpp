@@ -52,8 +52,8 @@ int main() {
     // test_threadVector();
     // SingelListMapTest();
     // ThreadPoolTest();
-    // simdSortingTest();
-    // return 0;
+    simdSortingTest();
+    return 0;
 
 #if defined(PLATFORM_WEB)
     createViewPort(true);

@@ -48,65 +48,81 @@ inline void doStep(__m256i& a, __m256i& b, __m256i& idx, int& blend) {
 __m256i sortRegister(__m256i reg) {
     // print_m256i(reg);
 
-    // 1,3
-    __m256i idxLocalLong = _mm256_set_epi32(4, 5, 6, 7, 0, 1, 2, 3);
-    constexpr int blendLocal = createMask(0, 0, 1, 1, 0, 0, 1, 1);
+    /*
+    A: [(0,2),(1,3),(4,6),(5,7)]
 
-    // 2,4
-    __m256i idxInter = _mm256_set_epi32(6, 7, 2, 3, 4, 5, 0, 1);
-    constexpr int blendInter = createMask(0, 1, 0, 0, 1, 1, 0, 1);
+    B: [(0,4),(1,5),(2,6),(3,7)]
 
-    // 5
-    __m256i idxLocalShort = _mm256_set_epi32(7, 5, 6, 3, 4, 1, 2, 0);
-    constexpr const int blendLocalShort = createMask(0, 0, 1, 0, 1, 0, 1, 1);
+    C: [(0,1),(2,3),(4,5),(6,7)]
 
-    // 6
-    __m256i idxPair = _mm256_set_epi32(6, 7, 4, 5, 2, 3, 0, 1);
-    constexpr const int blendPair = createMask(0, 1, 0, 1, 0, 1, 0, 1);
+    D: [(2,4),(3,5)]
+
+    E: [(1,4),(3,6)]
+
+    F: [(1,2),(3,4),(5,6)]
+    */
+
+    __m256i idxA = _mm256_set_epi32(5, 4, 7, 6, 1, 0, 3, 2);
+    constexpr int blendA = createMask(0, 0, 1, 1, 0, 0, 1, 1);
+
+    __m256i idxB = _mm256_set_epi32(3, 2, 1, 0, 7, 6, 5, 4);
+    constexpr int blendB = createMask(0, 0, 0, 0, 1, 1, 1, 1);
+
+    __m256i idxC = _mm256_set_epi32(6, 7, 4, 5, 2, 3, 0, 1);
+    constexpr const int blendC = createMask(0, 1, 0, 1, 0, 1, 0, 1);
+
+    __m256i idxD = _mm256_set_epi32(7, 6, 3, 2, 5, 4, 1, 0);
+    constexpr const int blendD = createMask(0, 0, 0, 0, 1, 1, 1, 1);
+
+    __m256i idxE = _mm256_set_epi32(7, 3, 5, 1, 6, 2, 4, 0);
+    constexpr const int blendE = createMask(0, 0, 0, 0, 1, 1, 1, 1);
+
+    __m256i idxF = _mm256_set_epi32(7, 5, 6, 3, 4, 1, 2, 0);
+    constexpr const int blendF = createMask(0, 0, 1, 0, 1, 0, 1, 1);
 
     // 1
-    __m256i b = _mm256_permutevar8x32_epi32(reg, idxLocalLong);
+    __m256i b = _mm256_permutevar8x32_epi32(reg, idxA);
     __m256i min = _mm256_min_epi32(reg, b);
     __m256i max = _mm256_max_epi32(reg, b);
-    reg = _mm256_blend_epi32(min, max, blendLocal);
+    reg = _mm256_blend_epi32(min, max, blendA);
     // std::cout << "---1---\n";
     // print_m256i(reg);
 
     // 2
-    b = _mm256_permutevar8x32_epi32(reg, idxInter);
+    b = _mm256_permutevar8x32_epi32(reg, idxB);
     min = _mm256_min_epi32(reg, b);
     max = _mm256_max_epi32(reg, b);
-    reg = _mm256_blend_epi32(min, max, blendInter);
+    reg = _mm256_blend_epi32(min, max, blendB);
     // std::cout << "---2---\n";
     // print_m256i(reg);
 
     // 3
-    b = _mm256_permutevar8x32_epi32(reg, idxLocalLong);
+    b = _mm256_permutevar8x32_epi32(reg, idxC);
     min = _mm256_min_epi32(reg, b);
     max = _mm256_max_epi32(reg, b);
-    reg = _mm256_blend_epi32(min, max, blendLocal);
+    reg = _mm256_blend_epi32(min, max, blendC);
     // std::cout << "---3---\n";
     // print_m256i(reg);
 
     // 4
-    b = _mm256_permutevar8x32_epi32(reg, idxInter);
+    b = _mm256_permutevar8x32_epi32(reg, idxD);
     min = _mm256_min_epi32(reg, b);
     max = _mm256_max_epi32(reg, b);
-    reg = _mm256_blend_epi32(min, max, blendInter);
+    reg = _mm256_blend_epi32(min, max, blendD);
 
     // 5
-    b = _mm256_permutevar8x32_epi32(reg, idxLocalShort);
+    b = _mm256_permutevar8x32_epi32(reg, idxE);
     min = _mm256_min_epi32(reg, b);
     max = _mm256_max_epi32(reg, b);
-    reg = _mm256_blend_epi32(min, max, blendLocalShort);
+    reg = _mm256_blend_epi32(min, max, blendE);
     // std::cout << "---4---\n";
     // print_m256i(reg);
 
     // 6
-    b = _mm256_permutevar8x32_epi32(reg, idxPair);
+    b = _mm256_permutevar8x32_epi32(reg, idxF);
     min = _mm256_min_epi32(reg, b);
     max = _mm256_max_epi32(reg, b);
-    reg = _mm256_blend_epi32(min, max, blendPair);
+    reg = _mm256_blend_epi32(min, max, blendF);
     // std::cout << "---5---\n";
     // print_m256i(reg);
 
