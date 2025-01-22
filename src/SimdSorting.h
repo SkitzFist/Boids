@@ -60,24 +60,18 @@ __m256i sortRegister(__m256i reg) {
     __m256i min = _mm256_min_epi32(reg, b);
     __m256i max = _mm256_max_epi32(reg, b);
     reg = _mm256_blend_epi32(min, max, blendA);
-    // std::cout << "---1---\n";
-    // print_m256i(reg);
 
     // 2
     b = _mm256_permutevar8x32_epi32(reg, idxB);
     min = _mm256_min_epi32(reg, b);
     max = _mm256_max_epi32(reg, b);
     reg = _mm256_blend_epi32(min, max, blendB);
-    // std::cout << "---2---\n";
-    // print_m256i(reg);
 
     // 3
     b = _mm256_permutevar8x32_epi32(reg, idxC);
     min = _mm256_min_epi32(reg, b);
     max = _mm256_max_epi32(reg, b);
     reg = _mm256_blend_epi32(min, max, blendC);
-    // std::cout << "---3---\n";
-    // print_m256i(reg);
 
     // 4
     b = _mm256_permutevar8x32_epi32(reg, idxD);
@@ -90,27 +84,20 @@ __m256i sortRegister(__m256i reg) {
     min = _mm256_min_epi32(reg, b);
     max = _mm256_max_epi32(reg, b);
     reg = _mm256_blend_epi32(min, max, blendE);
-    // std::cout << "---4---\n";
-    // print_m256i(reg);
 
     // 6
     b = _mm256_permutevar8x32_epi32(reg, idxF);
     min = _mm256_min_epi32(reg, b);
     max = _mm256_max_epi32(reg, b);
     reg = _mm256_blend_epi32(min, max, blendF);
-    // std::cout << "---5---\n";
-    // print_m256i(reg);
 
     return reg;
 }
 
 void simdSort(std::vector<int, AlignedAllocator<int, 32>>& vec) {
     for (std::size_t i = 0; i < vec.size() - 7; i += 8) {
-        // std::cout << "\n\n";
         _mm256_store_si256((__m256i*)&vec[i], sortRegister(_mm256_load_si256((__m256i*)&vec[i])));
     }
-
-    // sortRegister(_mm256_set_epi32(6, 3, 27, 18, 11, 26, 13, 9));
 }
 
 #endif
