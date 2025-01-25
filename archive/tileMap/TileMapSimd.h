@@ -17,7 +17,7 @@ struct TileMap {
 
     std::vector<int> tileIndexes;
     // each thread
-    std::array<std::vector<int>, ThreadSettings::THREAD_COUNT> threadMap;
+    std::array<std::vector<int>, ThreadSettingsNameSpace::THREAD_COUNT> threadMap;
 };
 
 // build

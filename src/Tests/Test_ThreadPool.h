@@ -4,28 +4,38 @@
 #include <iostream>
 
 #include "ThreadPool.h"
+#include "ThreadSettings.h"
 
 constexpr const int threads = 6;
 using namespace std::chrono_literals;
 void ThreadPoolTest() {
     std::cout << "Starting ThreadPool test\n";
-    ThreadPool pool;
+    ThreadSettings settings;
+    settings.workerCount = 8;
+    settings.workerStart = 1;
 
-    for (int i = 0; i < threads; ++i) {
+    ThreadPool pool(settings);
+
+    pool.enqueue(0, [] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10000));
+        std::cout << "TileMap thread Done\n";
+    });
+
+    for (int i = 1; i < settings.workerCount; ++i) {
         pool.enqueue(i, [i] {
-            std::cout << "Task " << i << "\n";
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000 * i));
+            std::cout << "WorkerThread[" << i << "]: done!\n";
         });
     }
 
-    pool.await();
+    std::cout << "A\n";
 
-    for (int i = 0; i < threads; ++i) {
-        pool.enqueue(i, [i] {
-            std::cout << "Task " << i << "\n";
-        });
-    }
+    pool.awaitTileMap();
 
-    pool.await();
+    std::cout << "B\n";
+
+    pool.awaitWorkers();
+    std::cout << "C\n";
 }
 
 #endif

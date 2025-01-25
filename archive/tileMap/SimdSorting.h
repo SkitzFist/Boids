@@ -13,16 +13,6 @@
     This only sorts on register basis, need to figure out how to sort two registers with eachother.
     TODO: Move this out to it's own repo.
 */
-
-void print_m256i(__m256i reg) {
-    alignas(32) int vals[8];
-    _mm256_store_si256((__m256i*)vals, reg);
-    for (int i = 0; i < 8; ++i) {
-        std::cout << vals[i] << " ";
-    }
-    std::cout << std::endl;
-}
-
 constexpr int createMask(int a, int b, int c, int d, int e, int f, int g, int h) {
     return (a ? 1 : 0) << 0 |
            (b ? 1 : 0) << 1 |
@@ -32,6 +22,19 @@ constexpr int createMask(int a, int b, int c, int d, int e, int f, int g, int h)
            (f ? 1 : 0) << 5 |
            (g ? 1 : 0) << 6 |
            (h ? 1 : 0) << 7;
+}
+
+#if defined(EMSCRIPTEN)
+void simdSort(std::vector<int, AlignedAllocator<int, 32>>& vec) {}
+#else
+
+void print_m256i(__m256i reg) {
+    alignas(32) int vals[8];
+    _mm256_store_si256((__m256i*)vals, reg);
+    for (int i = 0; i < 8; ++i) {
+        std::cout << vals[i] << " ";
+    }
+    std::cout << std::endl;
 }
 
 __m256i sortRegister(__m256i reg) {
@@ -99,5 +102,7 @@ void simdSort(std::vector<int, AlignedAllocator<int, 32>>& vec) {
         _mm256_store_si256((__m256i*)&vec[i], sortRegister(_mm256_load_si256((__m256i*)&vec[i])));
     }
 }
+
+#endif
 
 #endif

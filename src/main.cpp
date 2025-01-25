@@ -6,19 +6,26 @@
 #include "raylib.h"
 
 #include "Simulation.h"
+#include "ThreadPool.h"
+#include "ThreadSettings.h"
 #include "ViewPort.h"
-
-#include "CoreAffinity.h"
+#include "WorldSettings.h"
 
 #include "Tests/SimdSortTest.h"
-#include "Tests/Test_SingleListMap.h"
 #include "Tests/Test_ThreadPool.h"
-#include "Tests/Test_ThreadVector.h"
 
 #if defined(PLATFORM_WEB)
 
+const WorldSettings worldSettings;
+init(worldSettings, 1000000, 100, 100, 1024);
+
+const ThreadSettings threadSettings;
+init(threadSettings, worldSettings);
+
+const ThreadPool threadPool(threadSettings);
+
 Simulation& getInstance() {
-    static Simulation simulation;
+    static Simulation simulation(worldSettings, threadSettings, threadPool);
     return simulation;
 }
 
@@ -28,6 +35,10 @@ void UpdateCanvasSize(int width, int height) {
 
 void webTearDown() {
     emscripten_cancel_main_loop();
+
+    threadPool.~ThreadPool();
+    destroy(threadSettings);
+
     CloseWindow();
 }
 
@@ -46,11 +57,6 @@ EMSCRIPTEN_BINDINGS(my_module) {
 
 int main() {
 
-    setAffinity(0);
-    // setPriority();
-
-    // test_threadVector();
-    // SingelListMapTest();
     // ThreadPoolTest();
     // simdSortingTest();
     // return 0;
@@ -72,9 +78,18 @@ int main() {
     emscripten_set_main_loop(webLoop, 0, 1);
 #else
     {
+        WorldSettings worldSettings;
+        init(worldSettings, 1000000, 100, 100, 1024);
+
+        ThreadSettings threadSettings;
+        init(threadSettings, worldSettings);
+
+        ThreadPool threadPool(threadSettings);
+
         createViewPort(false);
-        Simulation simulation;
+        Simulation simulation(worldSettings, threadSettings, threadPool);
         simulation.run();
+        destroy(threadSettings);
     }
     CloseWindow();
 #endif

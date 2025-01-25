@@ -22,17 +22,17 @@ struct TileMap {
     std::vector<Tiles> threadMaps;
 
     TileMap(int numThreads) {
-        map.resize(WorldSettings::TILE_COUNT);
-        entityToTile.resize(WorldSettings::ENTITY_COUNT);
+        map.resize(WorldSettingsNameSpace::TILE_COUNT);
+        entityToTile.resize(WorldSettingsNameSpace::ENTITY_COUNT);
         threadMaps.resize(numThreads);
         for (int i = 0; i < numThreads; ++i) {
-            threadMaps[i].resize(WorldSettings::TILE_COUNT);
+            threadMaps[i].resize(WorldSettingsNameSpace::TILE_COUNT);
         }
     }
 
     void clear(ThreadPool& threadPool) {
-        int numThreads = ThreadSettings::THREAD_COUNT;
-        int numTiles = WorldSettings::TILE_COUNT;
+        int numThreads = ThreadSettingsNameSpace::THREAD_COUNT;
+        int numTiles = WorldSettingsNameSpace::TILE_COUNT;
 
         int tilesPerMap = numTiles / numThreads;
         int remainder = numTiles % numThreads;
@@ -54,7 +54,7 @@ struct TileMap {
         }
         for (int thread = 0; thread < numThreads; ++thread) {
             threadPool.enqueue(thread, [thread, &threadTiles = this->threadMaps] {
-                for (int tile = 0; tile < WorldSettings::TILE_COUNT; ++tile) {
+                for (int tile = 0; tile < WorldSettingsNameSpace::TILE_COUNT; ++tile) {
                     threadTiles[thread][tile].clear();
                 }
             });
@@ -64,14 +64,14 @@ struct TileMap {
     }
 
     void doEntityToTile(ThreadPool& threadPool, Positions& positions) {
-        int entitiesPerThread = WorldSettings::ENTITY_COUNT / ThreadSettings::THREAD_COUNT;
-        int remainder = WorldSettings::ENTITY_COUNT % ThreadSettings::THREAD_COUNT;
+        int entitiesPerThread = WorldSettingsNameSpace::ENTITY_COUNT / ThreadSettingsNameSpace::THREAD_COUNT;
+        int remainder = WorldSettingsNameSpace::ENTITY_COUNT % ThreadSettingsNameSpace::THREAD_COUNT;
 
-        for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
+        for (int thread = 0; thread < ThreadSettingsNameSpace::THREAD_COUNT; ++thread) {
             int startindex = thread * entitiesPerThread;
             int endIndex = thread + entitiesPerThread;
 
-            if (thread == ThreadSettings::THREAD_COUNT - 1) {
+            if (thread == ThreadSettingsNameSpace::THREAD_COUNT - 1) {
                 endIndex += remainder - 1;
             }
 
@@ -79,9 +79,9 @@ struct TileMap {
                 int tileCol, tileRow, tileIndex;
 
                 for (int i = startindex; i < endIndex; ++i) {
-                    tileCol = (int)positions.x[i] / WorldSettings::TILE_WIDTH;
-                    tileRow = (int)positions.y[i] / WorldSettings::TILE_HEIGHT;
-                    tileIndex = tileRow * WorldSettings::WORLD_COLUMNS + tileCol;
+                    tileCol = (int)positions.x[i] / WorldSettingsNameSpace::TILE_WIDTH;
+                    tileRow = (int)positions.y[i] / WorldSettingsNameSpace::TILE_HEIGHT;
+                    tileIndex = tileRow * WorldSettingsNameSpace::WORLD_COLUMNS + tileCol;
                     entityToTile[i] = tileIndex;
                 }
             });
@@ -92,13 +92,13 @@ struct TileMap {
 
     void rebuild(ThreadPool& threadPool) {
 
-        int entitiesPerThread = WorldSettings::ENTITY_COUNT / ThreadSettings::THREAD_COUNT;
-        int remainders = (WorldSettings::ENTITY_COUNT % ThreadSettings::THREAD_COUNT);
+        int entitiesPerThread = WorldSettingsNameSpace::ENTITY_COUNT / ThreadSettingsNameSpace::THREAD_COUNT;
+        int remainders = (WorldSettingsNameSpace::ENTITY_COUNT % ThreadSettingsNameSpace::THREAD_COUNT);
 
-        for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
+        for (int thread = 0; thread < ThreadSettingsNameSpace::THREAD_COUNT; ++thread) {
             int startEntity = thread * entitiesPerThread;
             int endEntity = startEntity + entitiesPerThread;
-            if (thread == ThreadSettings::THREAD_COUNT - 1) {
+            if (thread == ThreadSettingsNameSpace::THREAD_COUNT - 1) {
                 endEntity += remainders - 1;
             }
 
@@ -112,13 +112,13 @@ struct TileMap {
         }
 
         // // insert into map
-        int tilesPerThread = WorldSettings::TILE_COUNT / ThreadSettings::THREAD_COUNT;
-        remainders = WorldSettings::TILE_COUNT % ThreadSettings::THREAD_COUNT;
+        int tilesPerThread = WorldSettingsNameSpace::TILE_COUNT / ThreadSettingsNameSpace::THREAD_COUNT;
+        remainders = WorldSettingsNameSpace::TILE_COUNT % ThreadSettingsNameSpace::THREAD_COUNT;
 
-        for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
+        for (int thread = 0; thread < ThreadSettingsNameSpace::THREAD_COUNT; ++thread) {
             int startTile = thread * tilesPerThread;
             int endTile = startTile + tilesPerThread;
-            if (thread == ThreadSettings::THREAD_COUNT - 1) {
+            if (thread == ThreadSettingsNameSpace::THREAD_COUNT - 1) {
                 endTile += remainders - 1;
             }
 

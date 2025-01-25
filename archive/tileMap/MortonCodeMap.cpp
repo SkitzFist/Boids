@@ -23,8 +23,8 @@ void init(MortonMap& map, const int entityCount) {
 void encode(MortonMap& map, ThreadPool& pool, const PositionsI& pos) {
 
     int startEntity, endEntity;
-    const int threadCount = ThreadSettings::THREAD_COUNT;
-    const int entitiesPerThread = ThreadSettings::ENTITIES_PER_THREAD;
+    const int threadCount = ThreadSettingsNameSpace::THREAD_COUNT;
+    const int entitiesPerThread = ThreadSettingsNameSpace::ENTITIES_PER_THREAD;
     for (int thread = 0; thread < threadCount; ++thread) {
         startEntity = entitiesPerThread * thread;
         endEntity = startEntity + entitiesPerThread;
@@ -50,10 +50,10 @@ bool needsSorting(std::vector<uint32_t*>& entries, ThreadPool& pool) {
     std::atomic<bool> needsSorting = false;
 
     int startEntity, endEntity;
-    for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
-        startEntity = thread * ThreadSettings::ENTITIES_PER_THREAD;
+    for (int thread = 0; thread < ThreadSettingsNameSpace::THREAD_COUNT; ++thread) {
+        startEntity = thread * ThreadSettingsNameSpace::ENTITIES_PER_THREAD;
         // additional -1 because it compares i > i + 1
-        endEntity = startEntity + ThreadSettings::ENTITIES_PER_THREAD - 1;
+        endEntity = startEntity + ThreadSettingsNameSpace::ENTITIES_PER_THREAD - 1;
 
         pool.enqueue(thread, [&entries, &needsSorting, startEntity, endEntity] {
             int i = startEntity;
@@ -85,7 +85,7 @@ void sort(std::vector<uint32_t*>& entries, std::vector<int>& ids) {
 }
 
 void sort(std::vector<uint32_t>& entries, std::vector<int>& ids) {
-    std::sort(std::execution::par, entries.begin(), entries.end());
+    // std::sort(std::execution::par, entries.begin(), entries.end());
 }
 
 //////////////////////////

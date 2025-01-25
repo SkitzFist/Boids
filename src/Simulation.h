@@ -3,13 +3,17 @@
 
 #include "raylib.h"
 
+#include "ThreadSettings.h"
+#include "WorldSettings.h"
+
 #include "ThreadPool.h"
 
 // spatial
-#include "MortonCodeMap.h"
-#include "SingleListMap.h"
-#include "ThreadMap.h"
-#include "TileMapSimd.h"
+// #include "MortonCodeMap.h"
+// #include "SingleListMap.h"
+// #include "ThreadMap.h"
+// #include "TileMapSimd.h"
+#include "TileMapBuffer.h"
 
 // components
 #include "Positions.h"
@@ -19,7 +23,7 @@
 
 class Simulation {
   public:
-    Simulation();
+    Simulation(WorldSettings& worldSettings, ThreadSettings& threadSettings, ThreadPool& threadPool);
     ~Simulation();
 
     void run();
@@ -28,8 +32,12 @@ class Simulation {
     void onResize(int width, int height);
 
   private:
+    // settings
+    WorldSettings& worldSettings;
+    ThreadSettings& threadSettings;
+
     // threadpool
-    ThreadPool m_threadPool;
+    ThreadPool& m_threadPool;
 
     // camera
     Camera2D m_camera;
@@ -40,8 +48,8 @@ class Simulation {
     // TileMapSIMD m_tileMapSimd;
     TileMap m_tileMap;
     std::vector<int> m_entitiesInRange;
-    MortonMap m_mortonMap;
-    ThreadMap m_threadMap;
+    // MortonMap m_mortonMap;
+    // ThreadMap m_threadMap;
 
     // Components
     Positions m_positions;

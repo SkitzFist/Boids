@@ -10,7 +10,7 @@
 
 inline void radixSort(ThreadMap& map, ThreadPool& threadPool) {
     const size_t n = map.tileMap.size();
-    const int threadCount = ThreadSettings::THREAD_COUNT;
+    const int threadCount = ThreadSettingsNameSpace::THREAD_COUNT;
 
     // Shared histograms for each thread
     std::vector<std::vector<uint32_t>> threadHistogramsLow(threadCount, std::vector<uint32_t>(256, 0));
@@ -108,19 +108,22 @@ void init(ThreadMap& map, const int count) {
     map.tmpId.resize(count);
 }
 
+#if defined(EMSCRIPTEN)
+void rebuild(ThreadMap& map, ThreadPool& pool, Positions& pos) {}
+#else
 void rebuild(ThreadMap& map, ThreadPool& pool, Positions& pos) {
     // build entityToTile
     int startEntity, endEntity;
-    for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
-        startEntity = ThreadSettings::ENTITIES_PER_THREAD * thread;
-        endEntity = startEntity + ThreadSettings::ENTITIES_PER_THREAD;
+    for (int thread = 0; thread < ThreadSettingsNameSpace::THREAD_COUNT; ++thread) {
+        startEntity = ThreadSettingsNameSpace::ENTITIES_PER_THREAD * thread;
+        endEntity = startEntity + ThreadSettingsNameSpace::ENTITIES_PER_THREAD;
 
         pool.enqueue(thread, [&pos, &tileMap = map.tileMap, startEntity, endEntity, thread] {
-            __m256 tileWidthVec = _mm256_set1_ps(WorldSettings::TILE_WIDTH);
-            __m256 tileHeightVec = _mm256_set1_ps(WorldSettings::TILE_HEIGHT);
-            __m256i worldColumnsVec = _mm256_set1_epi32(WorldSettings::WORLD_COLUMNS);
-            __m256 invTileWidthVec = _mm256_set1_ps(1.0f / WorldSettings::TILE_WIDTH);
-            __m256 invTileHeightVec = _mm256_set1_ps(1.0f / WorldSettings::TILE_HEIGHT);
+            __m256 tileWidthVec = _mm256_set1_ps(WorldSettingsNameSpace::TILE_WIDTH);
+            __m256 tileHeightVec = _mm256_set1_ps(WorldSettingsNameSpace::TILE_HEIGHT);
+            __m256i worldColumnsVec = _mm256_set1_epi32(WorldSettingsNameSpace::WORLD_COLUMNS);
+            __m256 invTileWidthVec = _mm256_set1_ps(1.0f / WorldSettingsNameSpace::TILE_WIDTH);
+            __m256 invTileHeightVec = _mm256_set1_ps(1.0f / WorldSettingsNameSpace::TILE_HEIGHT);
 
             __m256 xPosVec;
             __m256 yPosVec;
@@ -179,10 +182,10 @@ void rebuild(ThreadMap& map, ThreadPool& pool, Positions& pos) {
                 float x = pos.x[entity];
                 float y = pos.y[entity];
 
-                int tileCol = static_cast<int>(x / WorldSettings::TILE_WIDTH);
-                int tileRow = static_cast<int>(y / WorldSettings::TILE_HEIGHT);
+                int tileCol = static_cast<int>(x / WorldSettingsNameSpace::TILE_WIDTH);
+                int tileRow = static_cast<int>(y / WorldSettingsNameSpace::TILE_HEIGHT);
 
-                tileMap[entity] = static_cast<uint16_t>(tileRow * WorldSettings::WORLD_COLUMNS + tileCol);
+                tileMap[entity] = static_cast<uint16_t>(tileRow * WorldSettingsNameSpace::WORLD_COLUMNS + tileCol);
             }
         });
 
@@ -209,10 +212,11 @@ void rebuild(ThreadMap& map, ThreadPool& pool, Positions& pos) {
 
     radixSort(map, pool);
 }
+#endif
 
 bool isSorted(ThreadMap& map) {
     bool isSorted = true;
-    for (int i = 0; i < WorldSettings::ENTITY_COUNT - 1; ++i) {
+    for (int i = 0; i < WorldSettingsNameSpace::ENTITY_COUNT - 1; ++i) {
         Log::info(std::to_string(map.tileMap[i]));
         if (map.tileMap[i] > map.tileMap[i + 1]) {
             isSorted = false;

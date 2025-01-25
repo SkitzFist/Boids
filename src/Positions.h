@@ -11,8 +11,8 @@ struct Positions {
     AlignedFloatVector y;
 
     Positions() {
-        x.resize(WorldSettings::ENTITY_COUNT);
-        y.resize(WorldSettings::ENTITY_COUNT);
+        x.resize(WorldSettingsNameSpace::ENTITY_COUNT);
+        y.resize(WorldSettingsNameSpace::ENTITY_COUNT);
     }
 };
 
@@ -21,8 +21,8 @@ struct PositionsI {
     AlignedInt32Vector y;
 
     PositionsI() {
-        x.resize(WorldSettings::ENTITY_COUNT);
-        y.resize(WorldSettings::ENTITY_COUNT);
+        x.resize(WorldSettingsNameSpace::ENTITY_COUNT);
+        y.resize(WorldSettingsNameSpace::ENTITY_COUNT);
     }
 };
 
@@ -31,8 +31,8 @@ struct PositionsI16 {
     std::vector<uint16_t> y;
 
     PositionsI16() {
-        x.resize(WorldSettings::ENTITY_COUNT);
-        y.resize(WorldSettings::ENTITY_COUNT);
+        x.resize(WorldSettingsNameSpace::ENTITY_COUNT);
+        y.resize(WorldSettingsNameSpace::ENTITY_COUNT);
     }
 };
 

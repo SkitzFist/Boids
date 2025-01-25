@@ -3,19 +3,22 @@
 #include <cmath>
 #include <unordered_set>
 
+#if defined(EMSCRIPTEN)
+void rebuild(TileMap& tileMap, ThreadPool& pool, const Positions& pos) {}
+#else
 void rebuild(TileMap& tileMap, ThreadPool& pool, const Positions& pos) {
     // build entityToTile
     int startEntity, endEntity;
-    for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
-        startEntity = ThreadSettings::ENTITIES_PER_THREAD * thread;
-        endEntity = startEntity + ThreadSettings::ENTITIES_PER_THREAD;
+    for (int thread = 0; thread < ThreadSettingsNameSpace::THREAD_COUNT; ++thread) {
+        startEntity = ThreadSettingsNameSpace::ENTITIES_PER_THREAD * thread;
+        endEntity = startEntity + ThreadSettingsNameSpace::ENTITIES_PER_THREAD;
 
         pool.enqueue(thread, [&pos, &tileMap = tileMap, startEntity, endEntity, thread] {
-            __m256 tileWidthVec = _mm256_set1_ps(WorldSettings::TILE_WIDTH);
-            __m256 tileHeightVec = _mm256_set1_ps(WorldSettings::TILE_HEIGHT);
-            __m256i worldColumnsVec = _mm256_set1_epi32(WorldSettings::WORLD_COLUMNS);
-            __m256 invTileWidthVec = _mm256_set1_ps(1.0f / WorldSettings::TILE_WIDTH);
-            __m256 invTileHeightVec = _mm256_set1_ps(1.0f / WorldSettings::TILE_HEIGHT);
+            __m256 tileWidthVec = _mm256_set1_ps(WorldSettingsNameSpace::TILE_WIDTH);
+            __m256 tileHeightVec = _mm256_set1_ps(WorldSettingsNameSpace::TILE_HEIGHT);
+            __m256i worldColumnsVec = _mm256_set1_epi32(WorldSettingsNameSpace::WORLD_COLUMNS);
+            __m256 invTileWidthVec = _mm256_set1_ps(1.0f / WorldSettingsNameSpace::TILE_WIDTH);
+            __m256 invTileHeightVec = _mm256_set1_ps(1.0f / WorldSettingsNameSpace::TILE_HEIGHT);
 
             __m256 xPosVec;
             __m256 yPosVec;
@@ -73,16 +76,18 @@ void rebuild(TileMap& tileMap, ThreadPool& pool, const Positions& pos) {
                 float x = pos.x[entity];
                 float y = pos.y[entity];
 
-                int tileCol = static_cast<int>(x / WorldSettings::TILE_WIDTH);
-                int tileRow = static_cast<int>(y / WorldSettings::TILE_HEIGHT);
+                int tileCol = static_cast<int>(x / WorldSettingsNameSpace::TILE_WIDTH);
+                int tileRow = static_cast<int>(y / WorldSettingsNameSpace::TILE_HEIGHT);
 
-                tileMap.tiles[entity] = static_cast<uint16_t>(tileRow * WorldSettings::WORLD_COLUMNS + tileCol);
+                tileMap.tiles[entity] = static_cast<uint16_t>(tileRow * WorldSettingsNameSpace::WORLD_COLUMNS + tileCol);
             }
         });
     }
 
     pool.await();
 }
+
+#endif
 
 inline static void bubbleSort(std::vector<uint16_t>& arr) {
     int n = arr.size();
@@ -119,9 +124,9 @@ void search(TileMap& map, ThreadPool& pool, const int tile, std::vector<int>& re
 
     int startEntity, endEntity;
 
-    for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
-        startEntity = thread * ThreadSettings::ENTITIES_PER_THREAD;
-        endEntity = startEntity + ThreadSettings::ENTITIES_PER_THREAD;
+    for (int thread = 0; thread < ThreadSettingsNameSpace::THREAD_COUNT; ++thread) {
+        startEntity = thread * ThreadSettingsNameSpace::ENTITIES_PER_THREAD;
+        endEntity = startEntity + ThreadSettingsNameSpace::ENTITIES_PER_THREAD;
 
         pool.enqueue(thread, [&tiles = map.tiles, &threadMap = map.threadMap, startEntity, endEntity, tile, thread] {
             for (int i = startEntity; i < endEntity; ++i) {
@@ -134,7 +139,7 @@ void search(TileMap& map, ThreadPool& pool, const int tile, std::vector<int>& re
 
     pool.await();
 
-    for (int i = 0; i < ThreadSettings::THREAD_COUNT; ++i) {
+    for (int i = 0; i < ThreadSettingsNameSpace::THREAD_COUNT; ++i) {
         for (int j = 0; j < map.threadMap[i].size(); ++j) {
             result.emplace_back(map.threadMap[i][j]);
         }
@@ -145,21 +150,21 @@ void search(TileMap& map, ThreadPool& pool, const int tile, std::vector<int>& re
 
 void search(TileMap& map, ThreadPool& pool, const Rectangle& area, std::vector<int>& result) {
     std::size_t estimatedNumTiles =
-        (static_cast<std::size_t>(area.height) / WorldSettings::TILE_HEIGHT) *
-        (static_cast<std::size_t>(area.width) / WorldSettings::TILE_WIDTH);
+        (static_cast<std::size_t>(area.height) / WorldSettingsNameSpace::TILE_HEIGHT) *
+        (static_cast<std::size_t>(area.width) / WorldSettingsNameSpace::TILE_WIDTH);
 
     map.tileIndexes.reserve(estimatedNumTiles);
 
     // Include all tile indexes the rectangle overlaps
-    const int startRow = static_cast<int>(std::floor(area.y / WorldSettings::TILE_HEIGHT));
-    const int endRow = static_cast<int>(std::ceil((area.y + area.height) / WorldSettings::TILE_HEIGHT));
-    const int startCol = static_cast<int>(std::floor(area.x / WorldSettings::TILE_WIDTH));
-    const int endCol = static_cast<int>(std::ceil((area.x + area.width) / WorldSettings::TILE_WIDTH));
+    const int startRow = static_cast<int>(std::floor(area.y / WorldSettingsNameSpace::TILE_HEIGHT));
+    const int endRow = static_cast<int>(std::ceil((area.y + area.height) / WorldSettingsNameSpace::TILE_HEIGHT));
+    const int startCol = static_cast<int>(std::floor(area.x / WorldSettingsNameSpace::TILE_WIDTH));
+    const int endCol = static_cast<int>(std::ceil((area.x + area.width) / WorldSettingsNameSpace::TILE_WIDTH));
 
     for (int row = startRow; row < endRow; ++row) {
         for (int col = startCol; col < endCol; ++col) {
             // Row-major index
-            const int tileIndex = row * WorldSettings::WORLD_COLUMNS + col;
+            const int tileIndex = row * WorldSettingsNameSpace::WORLD_COLUMNS + col;
             map.tileIndexes.emplace_back(tileIndex);
         }
     }
@@ -167,9 +172,9 @@ void search(TileMap& map, ThreadPool& pool, const Rectangle& area, std::vector<i
     std::sort(map.tileIndexes.begin(), map.tileIndexes.end()); // Sort for SIMD-friendly access
 
     int startEntity, endEntity;
-    for (int thread = 0; thread < ThreadSettings::THREAD_COUNT; ++thread) {
-        startEntity = thread * ThreadSettings::ENTITIES_PER_THREAD;
-        endEntity = startEntity + ThreadSettings::ENTITIES_PER_THREAD;
+    for (int thread = 0; thread < ThreadSettingsNameSpace::THREAD_COUNT; ++thread) {
+        startEntity = thread * ThreadSettingsNameSpace::ENTITIES_PER_THREAD;
+        endEntity = startEntity + ThreadSettingsNameSpace::ENTITIES_PER_THREAD;
 
         pool.enqueue(thread, [&map = map, startEntity, endEntity, thread] {
             for (int i = startEntity; i < endEntity; ++i) {
@@ -183,7 +188,7 @@ void search(TileMap& map, ThreadPool& pool, const Rectangle& area, std::vector<i
 
     pool.await();
 
-    for (int i = 0; i < ThreadSettings::THREAD_COUNT; ++i) {
+    for (int i = 0; i < ThreadSettingsNameSpace::THREAD_COUNT; ++i) {
         result.insert(result.end(), map.threadMap[i].begin(), map.threadMap[i].end());
     }
 
@@ -195,7 +200,7 @@ void init(TileMap& tileMap, int entityCount, ThreadPool& pool, const Positions& 
 
     rebuild(tileMap, pool, pos);
 
-    for (int i = 0; i < ThreadSettings::THREAD_COUNT; ++i) {
+    for (int i = 0; i < ThreadSettingsNameSpace::THREAD_COUNT; ++i) {
         tileMap.threadMap[i].reserve(20000);
     }
 }
