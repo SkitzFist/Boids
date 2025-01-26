@@ -1,5 +1,6 @@
 # Boids
-A simple boid simulation
+A simple boid simulation. It's a fun challenge on how far I can push the CPU.
+Goal: to run 10 million boids, where every single boid will get updated every single frame. (not necesarilly rendered though)
 
 
 # Compilation
