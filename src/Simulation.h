@@ -9,10 +9,6 @@
 #include "ThreadPool.h"
 
 // spatial
-// #include "MortonCodeMap.h"
-// #include "SingleListMap.h"
-// #include "ThreadMap.h"
-// #include "TileMapSimd.h"
 #include "TileMapBuffer.h"
 
 // components
@@ -33,27 +29,24 @@ class Simulation {
 
   private:
     // settings
-    WorldSettings& worldSettings;
-    ThreadSettings& threadSettings;
+    WorldSettings& m_worldSettings;
+    ThreadSettings& m_threadSettings;
 
     // threadpool
     ThreadPool& m_threadPool;
 
     // camera
     Camera2D m_camera;
-    Rectangle m_cameraRect;
 
     // spatial
-    // TileMap m_tileMap;
-    // TileMapSIMD m_tileMapSimd;
     TileMap m_tileMap;
     std::vector<int> m_entitiesInRange;
-    // MortonMap m_mortonMap;
-    // ThreadMap m_threadMap;
+    Rectangle m_cameraRect;
+    std::vector<int> m_entitiesinSearchArea;
+    Rectangle m_searchArea;
 
     // Components
     Positions m_positions;
-    PositionsI m_positionsI;
 
     // textures
     Texture2D m_circleTexture;

@@ -3,15 +3,16 @@
 
 #ifdef __EMSCRIPTEN__
 // Emscripten/WebAssembly does not have direct access to control CPU affinity as it's designed for the web
+#include "Log.h"
 #include <emscripten/emscripten.h>
 
 inline void setAffinity(const int core) {
     // No operation: WebAssembly runs within a browser environment, and thread affinity is managed by the JS engine/browser.
-    printf("Setting CPU affinity is not supported with WebAssembly\n");
+    Log::info("Setting CPU affinity is not supported with WebAssembly\n");
 }
 
 inline void setPriority() {
-    printf("Setting CPU priority is not supported with WebAssembly\n");
+    Log::info("Setting CPU priority is not supported with WebAssembly\n");
 }
 
 #else

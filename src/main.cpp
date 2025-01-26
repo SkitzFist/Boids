@@ -11,21 +11,22 @@
 #include "ViewPort.h"
 #include "WorldSettings.h"
 
-#include "Tests/SimdSortTest.h"
 #include "Tests/Test_ThreadPool.h"
+
+constexpr const int ENTITY_COUNT = 1000;
+constexpr const int COLUMNS = 2;
+constexpr const int ROWS = 2;
+constexpr const int TILE_SIZE = 1024;
 
 #if defined(PLATFORM_WEB)
 
-const WorldSettings worldSettings;
-init(worldSettings, 1000000, 100, 100, 1024);
+WorldSettings worldSettings;
+ThreadSettings threadSettings;
 
-const ThreadSettings threadSettings;
-init(threadSettings, worldSettings);
-
-const ThreadPool threadPool(threadSettings);
+ThreadPool* threadPool;
 
 Simulation& getInstance() {
-    static Simulation simulation(worldSettings, threadSettings, threadPool);
+    static Simulation simulation(worldSettings, threadSettings, *threadPool);
     return simulation;
 }
 
@@ -36,8 +37,7 @@ void UpdateCanvasSize(int width, int height) {
 void webTearDown() {
     emscripten_cancel_main_loop();
 
-    threadPool.~ThreadPool();
-    destroy(threadSettings);
+    delete threadPool;
 
     CloseWindow();
 }
@@ -62,6 +62,11 @@ int main() {
     // return 0;
 
 #if defined(PLATFORM_WEB)
+
+    init(worldSettings, ENTITY_COUNT, COLUMNS, ROWS, TILE_SIZE);
+    init(threadSettings, worldSettings);
+    threadPool = new ThreadPool(threadSettings);
+
     createViewPort(true);
 
     emscripten_run_script(R"(
@@ -79,7 +84,7 @@ int main() {
 #else
     {
         WorldSettings worldSettings;
-        init(worldSettings, 1000000, 100, 100, 1024);
+        init(worldSettings, ENTITY_COUNT, COLUMNS, ROWS, TILE_SIZE);
 
         ThreadSettings threadSettings;
         init(threadSettings, worldSettings);
@@ -89,7 +94,6 @@ int main() {
         createViewPort(false);
         Simulation simulation(worldSettings, threadSettings, threadPool);
         simulation.run();
-        destroy(threadSettings);
     }
     CloseWindow();
 #endif

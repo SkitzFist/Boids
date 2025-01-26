@@ -6,6 +6,7 @@
 
 #include "raylib.h"
 
+#include "AlignedAllocator.h"
 #include "Positions.h"
 #include "ThreadPool.h"
 #include "WorldSettings.h"
@@ -31,12 +32,14 @@ void rebuild(TileMap& map,
              const ThreadSettings& threadSettings,
              const Positions& positions);
 
-void rebuildBuffer(TileMapBuffer& buffer,
+void rebuildBuffer(std::vector<int>& tiles,
                    const WorldSettings& worldSettings,
                    const Positions& positions);
 
-void countSort(TileMapBuffer& buffer,
-               uint16_t maxValue);
+void resetEntityIds(const WorldSettings& worldSettings,
+                    std::vector<int>& entityIds);
+
+void countSort(TileMapBuffer& buffer);
 
 // Search
 void search(TileMapBuffer& buffer,

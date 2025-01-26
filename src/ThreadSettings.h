@@ -35,18 +35,9 @@ inline int getPhysicalCoreCount() noexcept {
 
 struct ThreadSettings {
     int tileMapThread;
-
     int workerStart;
     int workerCount;
-
     int entitiesPerThread;
-
-    int* threadEntityIndexes;
-
-    ThreadSettings() : tileMapThread(0), workerStart(0), workerCount(0), entitiesPerThread(0), threadEntityIndexes(nullptr) {}
-    // Prevent copying
-    ThreadSettings(const ThreadSettings&) = delete;
-    ThreadSettings& operator=(const ThreadSettings&) = delete;
 };
 
 inline void init(ThreadSettings& threadSettings, WorldSettings& worldSettings) {
@@ -77,20 +68,9 @@ inline void init(ThreadSettings& threadSettings, WorldSettings& worldSettings) {
     }
 
     threadSettings.entitiesPerThread = worldSettings.entityCount / threadSettings.workerCount;
-
-    // save start and end index
-    int* threadEntityIndexes = new int[threadSettings.workerCount * 2];
-
-    for (int i = 0; i < threadSettings.workerCount; ++i) {
-        int start = i * threadSettings.entitiesPerThread;
-        int end = start + threadSettings.entitiesPerThread;
-        threadEntityIndexes[i * 2] = start;
-        threadEntityIndexes[i * 2 + 1] = end;
-    }
 }
 
 inline void destroy(ThreadSettings& settings) {
-    delete[] settings.threadEntityIndexes;
 }
 
 #endif

@@ -13,6 +13,8 @@ struct WorldSettings {
 
     int worldWidth;
     int worldHeight;
+
+    WorldSettings() : entityCount(0), columns(0), rows(0), tileCount(0), tileWidth(0), tileHeight(0), worldWidth(0), worldHeight(0) {}
 };
 
 inline void init(WorldSettings& worldSettings, const int entityCount, const int columns, const int rows, const int tileSize) {
