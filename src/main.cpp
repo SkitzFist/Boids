@@ -6,12 +6,27 @@
 #include "raylib.h"
 
 #include "Simulation.h"
+#include "ThreadPool.h"
+#include "ThreadSettings.h"
 #include "ViewPort.h"
+#include "WorldSettings.h"
+
+#include "Tests/Test_ThreadPool.h"
+
+constexpr const int ENTITY_COUNT = 1000;
+constexpr const int COLUMNS = 2;
+constexpr const int ROWS = 2;
+constexpr const int TILE_SIZE = 1024;
 
 #if defined(PLATFORM_WEB)
 
+WorldSettings worldSettings;
+ThreadSettings threadSettings;
+
+ThreadPool* threadPool;
+
 Simulation& getInstance() {
-    static Simulation simulation;
+    static Simulation simulation(worldSettings, threadSettings, *threadPool);
     return simulation;
 }
 
@@ -21,6 +36,9 @@ void UpdateCanvasSize(int width, int height) {
 
 void webTearDown() {
     emscripten_cancel_main_loop();
+
+    delete threadPool;
+
     CloseWindow();
 }
 
@@ -31,7 +49,6 @@ void webLoop() {
 }
 
 // bindings
-
 EMSCRIPTEN_BINDINGS(my_module) {
     emscripten::function("UpdateCanvasSize", &UpdateCanvasSize);
 }
@@ -40,7 +57,16 @@ EMSCRIPTEN_BINDINGS(my_module) {
 
 int main() {
 
+    // ThreadPoolTest();
+    // simdSortingTest();
+    // return 0;
+
 #if defined(PLATFORM_WEB)
+
+    init(worldSettings, ENTITY_COUNT, COLUMNS, ROWS, TILE_SIZE);
+    init(threadSettings, worldSettings);
+    threadPool = new ThreadPool(threadSettings);
+
     createViewPort(true);
 
     emscripten_run_script(R"(
@@ -56,9 +82,19 @@ int main() {
 
     emscripten_set_main_loop(webLoop, 0, 1);
 #else
-    createViewPort(false);
-    Simulation simulation;
-    simulation.run();
+    {
+        WorldSettings worldSettings;
+        init(worldSettings, ENTITY_COUNT, COLUMNS, ROWS, TILE_SIZE);
+
+        ThreadSettings threadSettings;
+        init(threadSettings, worldSettings);
+
+        ThreadPool threadPool(threadSettings);
+
+        createViewPort(false);
+        Simulation simulation(worldSettings, threadSettings, threadPool);
+        simulation.run();
+    }
     CloseWindow();
 #endif
 

@@ -44,27 +44,44 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_INCLUDE})
 
 target_link_libraries(${PROJECT_NAME} raylib)
 
-if(NOT EMSCRIPTEN)
-  set(CMAKE_SYSTEM_NAME Windows)
-  set(CMAKE_C_COMPILER gcc)
-  set(CMAKE_CXX_COMPILER g++)
-  set(CMAKE_MAKE_PROGRAM mingw32-make)
-endif()
-
 if(EMSCRIPTEN)
-  set(CMAKE_EXECUTABLE_SUFFIX ".html")
-  target_compile_options(${PROJECT_NAME} PRIVATE -msimd128 -msse4.1 -O3 -pthread)
-  set_target_properties(${PROJECT_NAME} PROPERTIES
+set(CMAKE_EXECUTABLE_SUFFIX ".html")
+
+# Compiler flags
+target_compile_options(${PROJECT_NAME} PRIVATE 
+    -msimd128 
+    -msse4.1 
+    -O3 
+    -pthread 
+    -std=c++20
+)
+
+# Linker flags
+target_link_options(${PROJECT_NAME} PRIVATE -pthread)
+
+set_target_properties(${PROJECT_NAME} PROPERTIES
     SUFFIX ".html"
-    LINK_FLAGS "-O3 -lembind -s USE_GLFW=3 -s MAX_WEBGL_VERSION=2 -s MODULARIZE=1 -s EXPORT_ES6=1 -s ALLOW_MEMORY_GROWTH -D PLATFORM_WEB --shell-file ${CMAKE_SOURCE_DIR}/src/Shell.html"
-  )
+    LINK_FLAGS "\
+        -O3 \
+        -lembind \
+        -s USE_GLFW=3 \
+        -s MAX_WEBGL_VERSION=2 \
+        -s MODULARIZE=1 \
+        -s EXPORT_ES6=1 \
+        -s ALLOW_MEMORY_GROWTH=1 \
+        -s USE_PTHREADS=1 \
+        -s PTHREAD_POOL_SIZE=16 \
+        -s PTHREAD_POOL_SIZE_STRICT=2 \
+        -s NO_DISABLE_EXCEPTION_CATCHING \
+        --shell-file ${CMAKE_SOURCE_DIR}/src/Shell.html"
+)
 else()
   if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /W4 /O2)
   else()
-    target_compile_options(${PROJECT_NAME} PRIVATE -Wno-unused-variable)
-    set_target_properties(${PROJECT_NAME} PROPERTIES
-      LINK_FLAGS "-O3 -msse2"
-    )
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -mavx2 -msse2")
+  set_target_properties(${PROJECT_NAME} PROPERTIES
+      LINK_FLAGS "-O3 -mavx2"
+  )
   endif()
 endif()

@@ -33,3 +33,5 @@
 
 build_desktop/
 build_web/
+
+perf*

@@ -67,6 +67,7 @@
     <p id="output" />
     <script>
         var Module = {
+            pthread: true,
             print: (function () {
                 var element = document.getElementById('output');
                 if (element) element.value = ''; // clear browser cache
