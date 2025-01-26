@@ -21,3 +21,5 @@ As this is still under development, AVX2 capabilities is needed for desktop.
 When finished it should be fine to run with only SSE 4.1 capabilities. 
 
 Reccomended to have at least 6 physical cores. 
+
+The project "should" run on windows, but has not been tested there yet.
