@@ -34,37 +34,25 @@ inline int getPhysicalCoreCount() noexcept {
 #include <iostream>
 
 struct ThreadSettings {
-    int tileMapThread;
-    int workerStart;
     int workerCount;
     int entitiesPerThread;
 };
 
 inline void init(ThreadSettings& threadSettings, WorldSettings& worldSettings) {
-    int coresLeft = getPhysicalCoreCount();
-
-    --coresLeft; // main thread/core
-    --coresLeft; // tilemap thread/core
+    int coresLeft = getPhysicalCoreCount() - 2;
 
     // what's left is worker threads.
     if (coresLeft <= 0) {
         // houston we got a problem
         std::cerr << "ThreadSettings: System has too few cores\n";
         exit(1);
-    } else if (coresLeft == 2) {
-        // leave no cores for the system (will be a laggy ride though)
-    } else if (coresLeft > 2) {
-        // leave two cores for the system
-        coresLeft -= 2;
     }
 
-    threadSettings.tileMapThread = 0;
-    threadSettings.workerStart = 1;
     threadSettings.workerCount = coresLeft;
 
     // Entity count needs to be evenly divisible with worker threads
-    if (worldSettings.entityCount % threadSettings.workerCount != 0) {
-        worldSettings.entityCount += threadSettings.workerCount - (worldSettings.entityCount % threadSettings.workerCount);
+    if (worldSettings.entityCount % (threadSettings.workerCount / 2) != 0) {
+        worldSettings.entityCount += (threadSettings.workerCount / 2) - (worldSettings.entityCount % (threadSettings.workerCount / 2));
     }
 
     threadSettings.entitiesPerThread = worldSettings.entityCount / threadSettings.workerCount;

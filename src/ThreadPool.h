@@ -63,20 +63,13 @@ class ThreadPool {
         }
     }
 
-    void awaitWorkers() {
-        for (std::size_t i = settings.workerStart; i < m_threads.size(); ++i) {
+    void awaitWorkers(int start, int end) {
+        for (std::size_t i = start; i < end; ++i) {
             std::unique_lock<std::mutex> lock(*m_taskCompletionMutexes[i]);
             m_taskCompletionConditions[i]->wait(lock, [this, i] {
                 return m_tasksInProgress[i]->load(std::memory_order_relaxed) == 0;
             });
         }
-    }
-
-    void awaitTileMap() {
-        std::unique_lock<std::mutex> lock(*m_taskCompletionMutexes[settings.tileMapThread]);
-        m_taskCompletionConditions[settings.tileMapThread]->wait(lock, [this, tileMapThread = this->settings.tileMapThread] {
-            return m_tasksInProgress[tileMapThread]->load(std::memory_order_relaxed) == 0;
-        });
     }
 
     void close() {

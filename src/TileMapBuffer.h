@@ -34,10 +34,14 @@ void rebuild(TileMap& map,
 
 void rebuildBuffer(std::vector<int>& tiles,
                    const WorldSettings& worldSettings,
-                   const Positions& positions);
+                   const Positions& positions,
+                   const int entityStart,
+                   const int entityEnd);
 
 void resetEntityIds(const WorldSettings& worldSettings,
-                    std::vector<int>& entityIds);
+                    std::vector<int>& entityIds,
+                    const int startEntity,
+                    const int endEntity);
 
 void countSort(TileMapBuffer& buffer);
 

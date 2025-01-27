@@ -6,6 +6,9 @@
 
 #include "AlignedAllocator.h"
 
+// debug
+#include "Log.h"
+
 void init(TileMap& map, const int entityCount, const int tileCount) noexcept {
     map.rebuildBuffer = true;
     for (int i = 0; i < 2; ++i) {
@@ -21,31 +24,73 @@ void rebuild(TileMap& map,
              const WorldSettings& worldSettings,
              const ThreadSettings& threadSettings,
              const Positions& positions) {
+    // pool.await(); // all workers needs to be finished to avoid race conditions.
+    // map.rebuildBuffer = !map.rebuildBuffer;
 
-    pool.awaitTileMap();
+    // // Log::info("Threads: " + std::to_string(threadSettings.workerCount));
+    // int threads = 1; // threadSettings.workerCount >> 1; // uses lower half of threadpool
+    // int entitiesPerWorker = worldSettings.entityCount / threads;
+
+    // for (int i = 0; i < threads; ++i) {
+    //     // Log::info("T: " + std::to_string(i));
+    //     int entityStart = entitiesPerWorker * i;
+    //     int entityEnd = entityStart + entitiesPerWorker;
+    //     pool.enqueue(i,
+    //                  rebuildBuffer,
+    //                  std::ref(map.buffers[map.rebuildBuffer].tiles),
+    //                  std::ref(worldSettings),
+    //                  std::ref(positions),
+    //                  entityStart,
+    //                  entityEnd);
+    // }
+
+    // // await rebuildBuffer to avoid race condition when updating Positions.
+    // pool.awaitWorkers(0, threads);
+
+    // for (int i = 0; i < threads; ++i) {
+    //     int entityStart = entitiesPerWorker * i;
+    //     int entityEnd = entityStart + entitiesPerWorker;
+    //     pool.enqueue(i,
+    //                  resetEntityIds,
+    //                  std::ref(worldSettings),
+    //                  std::ref(map.buffers[map.rebuildBuffer].entityIds),
+    //                  entityStart,
+    //                  entityEnd);
+    // }
+
+    // pool.enqueue(0,
+    //              countSort,
+    //              std::ref(map.buffers[map.rebuildBuffer]));
+
     map.rebuildBuffer = !map.rebuildBuffer;
 
-    // rebuildBuffer(map.buffers[map.rebuildBuffer].tiles, worldSettings, positions);
-    // resetEntityIds(worldSettings, map.buffers[map.rebuildBuffer].entityIds);
-    // countSort(map.buffers[map.rebuildBuffer]);
-
-    pool.enqueue(threadSettings.tileMapThread,
+    pool.enqueue(0,
                  rebuildBuffer,
                  std::ref(map.buffers[map.rebuildBuffer].tiles),
                  std::ref(worldSettings),
-                 std::ref(positions));
+                 std::ref(positions),
+                 0,
+                 worldSettings.entityCount);
+    pool.awaitWorkers(0, 1);
 
-    pool.enqueue(threadSettings.tileMapThread,
-                 resetEntityIds, std::ref(worldSettings),
-                 std::ref(map.buffers[map.rebuildBuffer].entityIds));
+    pool.enqueue(0,
+                 resetEntityIds,
+                 std::ref(worldSettings),
+                 std::ref(map.buffers[map.rebuildBuffer].entityIds),
+                 0,
+                 worldSettings.entityCount);
 
-    pool.enqueue(threadSettings.tileMapThread,
+    pool.enqueue(0,
                  countSort,
                  std::ref(map.buffers[map.rebuildBuffer]));
 }
 
 #if defined(EMSCRIPTEN)
-void rebuildBuffer(std::vector<int>& tiles, const WorldSettings& worldSettings, const Positions& pos) {
+void rebuildBuffer(std::vector<int>& tiles,
+                   const WorldSettings& worldSettings,
+                   const Positions& pos,
+                   const int entityStart,
+                   const int entityEnd) {
     __m128i worldColumnsVec = _mm_set1_epi32(worldSettings.columns);
     __m128 invTileWidthVec = _mm_set1_ps(1.f / worldSettings.tileWidth);
     __m128 invTileHeightVec = _mm_set1_ps(1.f / worldSettings.tileHeight);
@@ -58,8 +103,8 @@ void rebuildBuffer(std::vector<int>& tiles, const WorldSettings& worldSettings, 
     __m128i tileRowMul;
     __m128i tileIndexVec;
 
-    int entity = 0;
-    for (; entity < worldSettings.entityCount - 4; entity += 4) {
+    int entity = entityStart;
+    for (; entity <= entityEnd - 4; entity += 4) {
         // Log::info("\tEntity: " + std::to_string(entity));
         _mm_prefetch((const char*)&pos.x[entity + 8], _MM_HINT_T0);
         _mm_prefetch((const char*)&pos.y[entity + 8], _MM_HINT_T0);
@@ -89,7 +134,7 @@ void rebuildBuffer(std::vector<int>& tiles, const WorldSettings& worldSettings, 
 
     // reset id map
     //  Handle remaining elements
-    for (; entity < worldSettings.entityCount; ++entity) {
+    for (; entity <= entityEnd; ++entity) {
         float x = pos.x[entity];
         float y = pos.y[entity];
 
@@ -117,8 +162,11 @@ void resetEntityIds(const WorldSettings& worldSettings, std::vector<int>& entity
 
 #else
 
-void rebuildBuffer(std::vector<int>& tiles, const WorldSettings& worldSettings, const Positions& pos) {
-    // Log::info("rebuild start");
+void rebuildBuffer(std::vector<int>& tiles,
+                   const WorldSettings& worldSettings,
+                   const Positions& pos,
+                   const int entityStart,
+                   const int entityEnd) {
     __m256i worldColumnsVec = _mm256_set1_epi32(worldSettings.columns);
     __m256 invTileWidthVec = _mm256_set1_ps(1.0f / worldSettings.tileWidth);
     __m256 invTileHeightVec = _mm256_set1_ps(1.0f / worldSettings.tileHeight);
@@ -132,8 +180,8 @@ void rebuildBuffer(std::vector<int>& tiles, const WorldSettings& worldSettings, 
     __m256i tileRowMul;
     __m256i tileIndexVec;
 
-    int entity = 0;
-    for (; entity < worldSettings.entityCount - 8; entity += 8) {
+    int entity = entityStart;
+    for (; entity <= entityEnd - 8; entity += 8) {
         // Log::info("\tEntity: " + std::to_string(entity));
         _mm_prefetch((const char*)&pos.x[entity + 16], _MM_HINT_T0);
         _mm_prefetch((const char*)&pos.y[entity + 16], _MM_HINT_T0);
@@ -163,7 +211,7 @@ void rebuildBuffer(std::vector<int>& tiles, const WorldSettings& worldSettings, 
 
     // reset id map
     //  Handle remaining elements
-    for (; entity < worldSettings.entityCount; ++entity) {
+    for (; entity < entityEnd; ++entity) {
         float x = pos.x[entity];
         float y = pos.y[entity];
 
@@ -176,17 +224,23 @@ void rebuildBuffer(std::vector<int>& tiles, const WorldSettings& worldSettings, 
     // Log::info("Rebuild done");
 }
 
-void resetEntityIds(const WorldSettings& worldSettings, std::vector<int>& entityIds) {
+void resetEntityIds(const WorldSettings& worldSettings,
+                    std::vector<int>& entityIds,
+                    const int startEntity,
+                    const int endEntity) {
     __m256i sequence = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
     __m256i increment = _mm256_set1_epi32(8);
+    __m256i startOffset = _mm256_set1_epi32(startEntity);
 
-    int entity = 0;
-    for (; entity < worldSettings.entityCount - 8; entity += 8) {
+    sequence = _mm256_add_epi32(sequence, startOffset);
+
+    int entity = startEntity;
+    for (; entity <= endEntity - 8; entity += 8) {
         _mm256_storeu_si256((__m256i*)&entityIds[entity], sequence);
         sequence = _mm256_add_epi32(sequence, increment);
     }
 
-    for (; entity < worldSettings.entityCount; ++entity) {
+    for (; entity < endEntity; ++entity) {
         entityIds[entity] = entity;
     }
 }
