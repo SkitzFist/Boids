@@ -13,6 +13,7 @@
 
 // components
 #include "Positions.h"
+#include "Velocities.h"
 
 // util
 #include "Timer.h"
@@ -47,6 +48,7 @@ class Simulation {
 
     // Components
     Positions m_positions;
+    Velocities m_velocities;
 
     // textures
     Texture2D m_circleTexture;
@@ -60,6 +62,9 @@ class Simulation {
     void handleInput();
     void update(float dt);
     void render() const;
+
+    // debug
+    void setSearchArea(Rectangle& rect, const float size);
 };
 
 #endif

@@ -1,12 +1,8 @@
 #include "Simulation.h"
 
-#include <immintrin.h>
-
-#include "raylib.h"
-
+// systems
 #include "CameraMoveSystem.h"
-#include "Settings.h"
-#include "ThreadPool.h"
+#include "MoveSystem.h"
 
 // debug
 #include "Log.h"
@@ -31,10 +27,14 @@ Simulation::Simulation(WorldSettings& worldSettings,
     m_circleTexture = renderTexture.texture;
 
     init(m_positions, m_worldSettings.entityCount);
+    init(m_velocities, m_worldSettings.entityCount);
 
     for (int i = 0; i < worldSettings.entityCount; ++i) {
-        m_positions.x[i] = GetRandomValue(0, worldSettings.worldWidth - 16);
-        m_positions.y[i] = GetRandomValue(0, worldSettings.worldHeight - 16);
+        m_positions.x[i] = (float)GetRandomValue(0, worldSettings.worldWidth - 16);
+        m_positions.y[i] = (float)GetRandomValue(0, worldSettings.worldHeight - 16);
+
+        m_velocities.x[i] = (float)GetRandomValue(-100.f, 100.f);
+        m_velocities.y[i] = (float)GetRandomValue(-100.f, 100.f);
     }
 
     init(m_tileMap, worldSettings.entityCount, worldSettings.tileCount);
@@ -64,12 +64,20 @@ bool Simulation::webRun() {
 void Simulation::gameLoop() {
     float dt = GetFrameTime();
 
+    m_threadPool.await();
+
     handleInput();
     update(dt);
     render();
 }
 
 void Simulation::handleInput() {
+}
+
+void Simulation::setSearchArea(Rectangle& rect, const float size) {
+    Vector2 mousePos = GetScreenToWorld2D(GetMousePosition(), m_camera);
+
+    rect = {mousePos.x - (size / 2.f), mousePos.y - (size / 2.f), size, size};
 }
 
 void Simulation::update(float dt) {
@@ -79,32 +87,32 @@ void Simulation::update(float dt) {
     // set camera rect:
     m_cameraRect = {m_camera.target.x, m_camera.target.y, GetScreenWidth() / m_camera.zoom, GetScreenHeight() / m_camera.zoom};
 
-    // // tmp move pos
-    // for (int i = 0; i < worldSettings.entityCount; ++i) {
-
-    //     int speed = i % 2 == 0 ? 1 : -1;
-    //     m_positions.x[i] += GetRandomValue(0, speed);
-
-    //     if (m_positions.x[i] > worldSettings.worldWidth) {
-    //         m_positions.x[i] = 0;
-    //     } else if (m_positions.x[i] < 0) {
-    //         m_positions.x[i] = worldSettings.worldWidth - 16;
-    //     }
-    // }
-
     // tileMapBuffer
     rebuild(m_tileMap, m_threadPool, m_worldSettings, m_threadSettings, m_positions);
 
     m_entitiesInRange.clear();
-    search(m_tileMap.buffers[!m_tileMap.rebuildBuffer], m_cameraRect, m_entitiesInRange, m_worldSettings, m_positions);
+    search(m_tileMap.buffers[!m_tileMap.rebuildBuffer],
+           m_cameraRect,
+           m_entitiesInRange,
+           m_worldSettings,
+           m_positions);
 
-    Vector2 mousePos = GetScreenToWorld2D(GetMousePosition(), m_camera);
-    float size = 200.f;
-    m_searchArea = {
-        mousePos.x - (size / 2.f), mousePos.y - (size / 2.f),
-        size, size};
+    setSearchArea(m_searchArea, 200.f);
     m_entitiesinSearchArea.clear();
-    search(m_tileMap.buffers[!m_tileMap.rebuildBuffer], m_searchArea, m_entitiesinSearchArea, m_worldSettings, m_positions);
+    search(m_tileMap.buffers[!m_tileMap.rebuildBuffer],
+           m_searchArea,
+           m_entitiesinSearchArea,
+           m_worldSettings,
+           m_positions);
+
+    // move system
+    applyVelocities(m_threadPool,
+                    m_positions,
+                    m_velocities,
+                    m_threadSettings.threadCount,
+                    m_worldSettings.worldWidth - 16.f,  // size
+                    m_worldSettings.worldHeight - 16.f, // size
+                    dt);
 }
 
 void Simulation::render() const {
@@ -113,15 +121,15 @@ void Simulation::render() const {
 
     // draw worldTiles
     BeginMode2D(m_camera);
-    for (int x = 0; x < m_worldSettings.columns; ++x) {
-        for (int y = 0; y < m_worldSettings.rows; ++y) {
-            DrawRectangleLines(x * m_worldSettings.tileWidth,
-                               y * m_worldSettings.tileHeight,
-                               (float)m_worldSettings.tileWidth,
-                               (float)m_worldSettings.tileHeight,
-                               BLACK);
-        }
-    }
+    // for (int x = 0; x < m_worldSettings.columns; ++x) {
+    //     for (int y = 0; y < m_worldSettings.rows; ++y) {
+    //         DrawRectangleLines(x * m_worldSettings.tileWidth,
+    //                            y * m_worldSettings.tileHeight,
+    //                            (float)m_worldSettings.tileWidth,
+    //                            (float)m_worldSettings.tileHeight,
+    //                            BLACK);
+    //     }
+    // }
 
     // draw circles
     Rectangle src = {0.f, 0.f, 16.f, 16.f};

@@ -2,6 +2,7 @@
 #define BOIDS_TILE_MAP_BUFFER_H
 
 #include <array>
+#include <atomic>
 #include <vector>
 
 #include "raylib.h"
@@ -12,10 +13,10 @@
 #include "WorldSettings.h"
 
 struct TileMapBuffer {
-    std::vector<int> tiles;
-    std::vector<int> entityIds;
-    std::vector<int> tileStartindex;
-    std::vector<int> tilesEntityCount;
+    AlignedInt32Vector entityToTile;
+    AlignedInt32Vector entityIds;
+    AlignedInt32Vector tileStartindex;
+    AlignedInt32Vector tilesEntityCount;
 };
 
 struct TileMap {
@@ -32,14 +33,26 @@ void rebuild(TileMap& map,
              const ThreadSettings& threadSettings,
              const Positions& positions);
 
-void rebuildBuffer(std::vector<int>& tiles,
+void rebuildBuffer(AlignedInt32Vector& entityToTile,
                    const WorldSettings& worldSettings,
-                   const Positions& positions);
+                   const Positions& positions,
+                   const int entityStart,
+                   const int entityEnd);
 
-void resetEntityIds(const WorldSettings& worldSettings,
-                    std::vector<int>& entityIds);
+void resetEntityIds(AlignedInt32Vector& entityIds,
+                    const int startEntity,
+                    const int endEntity);
 
-void countSort(TileMapBuffer& buffer);
+void resetTo(AlignedInt32Vector& vec,
+             const int value,
+             const int entityStart,
+             const int entityEnd);
+
+void count(const AlignedInt32Vector& entityToTile,
+           AlignedInt32Vector& tileStartindex,
+           AlignedInt32Vector& tilesEntityCount);
+
+void setId(TileMapBuffer& buffer, int entityCount);
 
 // Search
 void search(TileMapBuffer& buffer,
