@@ -12,13 +12,14 @@ void applyVelocities(ThreadPool& threadPool,
                      const float worldHeight,
                      float dt) {
 
-    int threads = threadCount - 2;
+    int threads = threadCount > 4 ? 4 : 2;
     int entitiesPerThread = positions.x.size() / threads;
+
     for (int i = 0; i < threads; ++i) {
         int entitiesStart = i * entitiesPerThread;
         int entitiesEnd = entitiesStart + entitiesPerThread;
 
-        int thread = 1 + i; // uses upper half of threadpool
+        int thread = 0;
         threadPool.enqueue(thread,
                            applyVelocitiesJob,
                            std::ref(positions.x),

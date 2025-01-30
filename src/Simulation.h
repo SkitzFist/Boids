@@ -62,6 +62,9 @@ class Simulation {
     void handleInput();
     void update(float dt);
     void render() const;
+
+    // debug
+    void setSearchArea(Rectangle& rect, const float size);
 };
 
 #endif

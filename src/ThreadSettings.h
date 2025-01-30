@@ -34,12 +34,11 @@ inline int getPhysicalCoreCount() noexcept {
 #include <iostream>
 
 struct ThreadSettings {
-    int workerCount;
-    int entitiesPerThread;
+    int threadCount;
 };
 
 inline void init(ThreadSettings& threadSettings, WorldSettings& worldSettings) {
-    int coresLeft = getPhysicalCoreCount() - 2;
+    int coresLeft = getPhysicalCoreCount() - 2; // one core for main program and leave one for system.
 
     // what's left is worker threads.
     if (coresLeft <= 0) {
@@ -48,17 +47,12 @@ inline void init(ThreadSettings& threadSettings, WorldSettings& worldSettings) {
         exit(1);
     }
 
-    threadSettings.workerCount = coresLeft;
+    threadSettings.threadCount = coresLeft;
 
     // Entity count needs to be evenly divisible with worker threads
-    if (worldSettings.entityCount % (threadSettings.workerCount / 2) != 0) {
-        worldSettings.entityCount += (threadSettings.workerCount / 2) - (worldSettings.entityCount % (threadSettings.workerCount / 2));
+    if (worldSettings.entityCount % threadSettings.threadCount != 0) {
+        worldSettings.entityCount += threadSettings.threadCount - (worldSettings.entityCount % threadSettings.threadCount);
     }
-
-    threadSettings.entitiesPerThread = worldSettings.entityCount / threadSettings.workerCount;
-}
-
-inline void destroy(ThreadSettings& settings) {
 }
 
 #endif

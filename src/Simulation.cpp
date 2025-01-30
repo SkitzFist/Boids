@@ -74,6 +74,12 @@ void Simulation::gameLoop() {
 void Simulation::handleInput() {
 }
 
+void Simulation::setSearchArea(Rectangle& rect, const float size) {
+    Vector2 mousePos = GetScreenToWorld2D(GetMousePosition(), m_camera);
+
+    rect = {mousePos.x - (size / 2.f), mousePos.y - (size / 2.f), size, size};
+}
+
 void Simulation::update(float dt) {
     // move camera
     updateCamera(m_camera, dt);
@@ -91,11 +97,19 @@ void Simulation::update(float dt) {
            m_worldSettings,
            m_positions);
 
+    setSearchArea(m_searchArea, 200.f);
+    m_entitiesinSearchArea.clear();
+    search(m_tileMap.buffers[!m_tileMap.rebuildBuffer],
+           m_searchArea,
+           m_entitiesinSearchArea,
+           m_worldSettings,
+           m_positions);
+
     // move system
     applyVelocities(m_threadPool,
                     m_positions,
                     m_velocities,
-                    m_threadSettings.workerCount,
+                    m_threadSettings.threadCount,
                     m_worldSettings.worldWidth - 16.f,  // size
                     m_worldSettings.worldHeight - 16.f, // size
                     dt);
@@ -133,11 +147,11 @@ void Simulation::render() const {
         DrawTexturePro(m_circleTexture, src, dst, {0.f, 0.f}, 0.f, YELLOW);
     }
 
-    // for (const int i : m_entitiesinSearchArea) {
-    //     dst.x = (float)m_positions.x[i];
-    //     dst.y = (float)m_positions.y[i];
-    //     DrawTexturePro(m_circleTexture, src, dst, {0.f, 0.f}, 0.f, GREEN);
-    // }
+    for (const int i : m_entitiesinSearchArea) {
+        dst.x = (float)m_positions.x[i];
+        dst.y = (float)m_positions.y[i];
+        DrawTexturePro(m_circleTexture, src, dst, {0.f, 0.f}, 0.f, GREEN);
+    }
 
     DrawRectangleLinesEx(m_searchArea, 1.f, GREEN);
 

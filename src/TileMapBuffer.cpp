@@ -8,12 +8,13 @@
 
 // debug
 #include "Log.h"
+#include <Timer.h>
 
 void init(TileMap& map, const int entityCount, const int tileCount) noexcept {
     map.rebuildBuffer = true;
     for (int i = 0; i < 2; ++i) {
         map.buffers[i].entityIds.resize(entityCount);
-        map.buffers[i].tiles.resize(entityCount);
+        map.buffers[i].entityToTile.resize(entityCount);
         map.buffers[i].tileStartindex.resize(tileCount);
         map.buffers[i].tilesEntityCount.resize(tileCount);
     }
@@ -24,65 +25,51 @@ void rebuild(TileMap& map,
              const WorldSettings& worldSettings,
              const ThreadSettings& threadSettings,
              const Positions& positions) {
-    // pool.await(); // all workers needs to be finished to avoid race conditions.
-    // map.rebuildBuffer = !map.rebuildBuffer;
-
-    // // Log::info("Threads: " + std::to_string(threadSettings.workerCount));
-    // int threads = 1; // threadSettings.workerCount >> 1; // uses lower half of threadpool
-    // int entitiesPerWorker = worldSettings.entityCount / threads;
-
-    // for (int i = 0; i < threads; ++i) {
-    //     // Log::info("T: " + std::to_string(i));
-    //     int entityStart = entitiesPerWorker * i;
-    //     int entityEnd = entityStart + entitiesPerWorker;
-    //     pool.enqueue(i,
-    //                  rebuildBuffer,
-    //                  std::ref(map.buffers[map.rebuildBuffer].tiles),
-    //                  std::ref(worldSettings),
-    //                  std::ref(positions),
-    //                  entityStart,
-    //                  entityEnd);
-    // }
-
-    // // await rebuildBuffer to avoid race condition when updating Positions.
-    // pool.awaitWorkers(0, threads);
-
-    // for (int i = 0; i < threads; ++i) {
-    //     int entityStart = entitiesPerWorker * i;
-    //     int entityEnd = entityStart + entitiesPerWorker;
-    //     pool.enqueue(i,
-    //                  resetEntityIds,
-    //                  std::ref(worldSettings),
-    //                  std::ref(map.buffers[map.rebuildBuffer].entityIds),
-    //                  entityStart,
-    //                  entityEnd);
-    // }
-
-    // pool.enqueue(0,
-    //              countSort,
-    //              std::ref(map.buffers[map.rebuildBuffer]));
+    static Timer t;
+    t.begin();
 
     map.rebuildBuffer = !map.rebuildBuffer;
 
-    pool.enqueue(0,
-                 rebuildBuffer,
-                 std::ref(map.buffers[map.rebuildBuffer].tiles),
-                 std::ref(worldSettings),
-                 std::ref(positions),
-                 0,
-                 worldSettings.entityCount);
-    pool.awaitWorkers(0, 1);
+    int threads = threadSettings.threadCount >> 1;
+    int entitiesPerThread = worldSettings.entityCount / threads;
+
+    for (int i = 0; i < threads; ++i) {
+        int startEntity = i * entitiesPerThread;
+        int endEntity = startEntity + entitiesPerThread;
+        // use lower half of threadpool
+        pool.enqueue(i,
+                     rebuildBuffer,
+                     std::ref(map.buffers[map.rebuildBuffer].entityToTile),
+                     std::ref(worldSettings),
+                     std::ref(positions),
+                     startEntity,
+                     endEntity);
+
+        // use upper half of threadpool
+        int thread = threads + i;
+        pool.enqueue(thread,
+                     resetEntityIds,
+                     std::ref(map.buffers[map.rebuildBuffer].entityIds),
+                     startEntity,
+                     endEntity);
+    }
+    // use main core
+    std::fill(map.buffers[map.rebuildBuffer].tileStartindex.begin(), map.buffers[map.rebuildBuffer].tileStartindex.end(), -1);
+    std::fill(map.buffers[map.rebuildBuffer].tilesEntityCount.begin(), map.buffers[map.rebuildBuffer].tilesEntityCount.end(), 0);
+
+    pool.await();
 
     pool.enqueue(0,
-                 resetEntityIds,
-                 std::ref(worldSettings),
-                 std::ref(map.buffers[map.rebuildBuffer].entityIds),
-                 0,
-                 worldSettings.entityCount);
+                 count,
+                 std::ref(map.buffers[map.rebuildBuffer].entityToTile),
+                 std::ref(map.buffers[map.rebuildBuffer].tileStartindex),
+                 std::ref(map.buffers[map.rebuildBuffer].tilesEntityCount));
 
     pool.enqueue(0,
-                 countSort,
-                 std::ref(map.buffers[map.rebuildBuffer]));
+                 setId,
+                 std::ref(map.buffers[map.rebuildBuffer]),
+                 worldSettings.entityCount);
+    // no await, let it rebuild for next frame.
 }
 
 #if defined(EMSCRIPTEN)
@@ -162,7 +149,7 @@ void resetEntityIds(const WorldSettings& worldSettings, std::vector<int>& entity
 
 #else
 
-void rebuildBuffer(std::vector<int>& tiles,
+void rebuildBuffer(AlignedInt32Vector& entityToTiles,
                    const WorldSettings& worldSettings,
                    const Positions& pos,
                    const int entityStart,
@@ -205,7 +192,7 @@ void rebuildBuffer(std::vector<int>& tiles,
 
         // Log::info("\tindex done!");
 
-        _mm256_storeu_si256((__m256i*)&tiles[entity], tileIndexVec);
+        _mm256_store_si256((__m256i*)&entityToTiles[entity], tileIndexVec);
         // Log::info("\tstore done!");
     }
 
@@ -218,14 +205,13 @@ void rebuildBuffer(std::vector<int>& tiles,
         int tileCol = static_cast<int>(x / worldSettings.tileWidth);
         int tileRow = static_cast<int>(y / worldSettings.tileHeight);
 
-        tiles[entity] = tileRow * worldSettings.columns + tileCol;
+        entityToTiles[entity] = tileRow * worldSettings.columns + tileCol;
     }
 
     // Log::info("Rebuild done");
 }
 
-void resetEntityIds(const WorldSettings& worldSettings,
-                    std::vector<int>& entityIds,
+void resetEntityIds(AlignedInt32Vector& entityIds,
                     const int startEntity,
                     const int endEntity) {
     __m256i sequence = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
@@ -235,8 +221,19 @@ void resetEntityIds(const WorldSettings& worldSettings,
     sequence = _mm256_add_epi32(sequence, startOffset);
 
     int entity = startEntity;
-    for (; entity <= endEntity - 8; entity += 8) {
-        _mm256_storeu_si256((__m256i*)&entityIds[entity], sequence);
+    for (; entity <= endEntity - 32; entity += 32) {
+        _mm_prefetch((const char*)&entityIds[entity + 64], _MM_HINT_T0);
+
+        _mm256_store_si256((__m256i*)&entityIds[entity], sequence);
+        sequence = _mm256_add_epi32(sequence, increment);
+
+        _mm256_store_si256((__m256i*)&entityIds[entity + 8], sequence);
+        sequence = _mm256_add_epi32(sequence, increment);
+
+        _mm256_store_si256((__m256i*)&entityIds[entity + 16], sequence);
+        sequence = _mm256_add_epi32(sequence, increment);
+
+        _mm256_store_si256((__m256i*)&entityIds[entity + 32], sequence);
         sequence = _mm256_add_epi32(sequence, increment);
     }
 
@@ -247,45 +244,28 @@ void resetEntityIds(const WorldSettings& worldSettings,
 
 #endif
 
-/* Leaks memory on closing. Not sure what causes it though.
- Pretty sure it's a thread issue. The TileMapBuffer has gone out of scope.
-*/
-void countSort(TileMapBuffer& buffer) {
-
-    std::fill(buffer.tilesEntityCount.begin(), buffer.tilesEntityCount.end(), 0);
-    std::fill(buffer.tileStartindex.begin(), buffer.tileStartindex.end(), -1);
-
-    size_t n = buffer.tiles.size();
-    std::vector<size_t> count(n, 0);
-    for (size_t i = 0; i < n; ++i) {
-        ++count[buffer.tiles[i]];
-        ++buffer.tilesEntityCount[buffer.tiles[i]];
+void count(const AlignedInt32Vector& entityToTiles,
+           AlignedInt32Vector& tileStartindex,
+           AlignedInt32Vector& tilesEntityCount) {
+    for (size_t i = 0; i < entityToTiles.size(); ++i) {
+        ++tilesEntityCount[entityToTiles[i]];
     }
 
-    for (size_t val = 1; val < n; ++val) {
-        count[val] += count[val - 1];
-    }
-
-    std::vector<int> sortedTiles(n);
-    std::vector<int> sortedIds(n);
-
-    for (size_t i = n; i > 0; --i) {
-        uint16_t val = buffer.tiles[i - 1];
-        size_t pos = --count[val];
-        sortedTiles[pos] = val;
-        sortedIds[pos] = buffer.entityIds[i - 1];
-    }
-
-    buffer.tiles.swap(sortedTiles);
-    buffer.entityIds.swap(sortedIds);
-
-    // set tileStartIndex
     size_t currentIndex = 0;
-    for (size_t i = 0; i < buffer.tilesEntityCount.size(); ++i) {
-        if (buffer.tilesEntityCount[i] > 0) {
-            buffer.tileStartindex[i] = currentIndex;
+    for (size_t i = 0; i < tilesEntityCount.size(); ++i) {
+        if (tilesEntityCount[i] > 0) {
+            tileStartindex[i] = currentIndex;
         }
-        currentIndex += buffer.tilesEntityCount[i];
+        currentIndex += tilesEntityCount[i];
+    }
+}
+
+void setId(TileMapBuffer& buffer, int entityCount) {
+    AlignedInt32Vector currentTileIndex = buffer.tileStartindex;
+
+    for (int i = 0; i < entityCount; ++i) {
+        int tile = buffer.entityToTile[i];
+        buffer.entityIds[currentTileIndex[tile]++] = i;
     }
 }
 
@@ -293,7 +273,9 @@ void countSort(TileMapBuffer& buffer) {
 ///         Searching        ///
 ///////////////////////////////
 
-static inline bool IsColliding(const Rectangle rect, const float x, const float y) {
+static inline bool IsColliding(const Rectangle rect,
+                               const float x,
+                               const float y) {
     if (x < rect.x)
         return false;
 
@@ -309,7 +291,11 @@ static inline bool IsColliding(const Rectangle rect, const float x, const float 
     return true;
 }
 
-void search(TileMapBuffer& buffer, const Rectangle& area, std::vector<int>& result, const WorldSettings& worldSettings, const Positions& positions) {
+void search(TileMapBuffer& buffer,
+            const Rectangle& area,
+            std::vector<int>& result,
+            const WorldSettings& worldSettings,
+            const Positions& positions) {
 
     int startRow = static_cast<int>(std::floor(area.y / worldSettings.tileHeight));
     int endRow = static_cast<int>(std::ceil((area.y + area.height) / worldSettings.tileHeight));

@@ -91,7 +91,8 @@ int main() {
 
         ThreadPool threadPool(threadSettings);
 
-        setAffinity(threadSettings.workerCount);
+        setAffinity(threadSettings.threadCount);
+        setPriority();
 
         createViewPort(false);
         Simulation simulation(worldSettings, threadSettings, threadPool);

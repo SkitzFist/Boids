@@ -19,15 +19,15 @@ class ThreadPool {
   public:
     ThreadPool(const ThreadSettings& settings) : settings(settings), isRunning(true) {
 
-        m_taskQueues.reserve(settings.workerCount + 1);
-        m_queueMutexes.reserve(settings.workerCount + 1);
-        m_queueConditions.reserve(settings.workerCount + 1);
-        m_tasksInProgress.reserve(settings.workerCount + 1);
-        m_taskCompletionMutexes.reserve(settings.workerCount + 1);
-        m_taskCompletionConditions.reserve(settings.workerCount + 1);
-        m_threads.reserve(settings.workerCount + 1);
+        m_taskQueues.reserve(settings.threadCount + 1);
+        m_queueMutexes.reserve(settings.threadCount + 1);
+        m_queueConditions.reserve(settings.threadCount + 1);
+        m_tasksInProgress.reserve(settings.threadCount + 1);
+        m_taskCompletionMutexes.reserve(settings.threadCount + 1);
+        m_taskCompletionConditions.reserve(settings.threadCount + 1);
+        m_threads.reserve(settings.threadCount + 1);
 
-        for (std::size_t i = 0; i < settings.workerCount + 1; ++i) {
+        for (std::size_t i = 0; i < settings.threadCount + 1; ++i) {
             m_taskQueues.emplace_back(std::make_unique<std::queue<std::function<void()>>>());
             m_queueMutexes.emplace_back(std::make_unique<std::mutex>());
             m_queueConditions.emplace_back(std::make_unique<std::condition_variable>());
@@ -64,7 +64,7 @@ class ThreadPool {
     }
 
     void awaitWorkers(int start, int end) {
-        for (std::size_t i = start; i < end; ++i) {
+        for (std::size_t i = start; i <= end; ++i) {
             std::unique_lock<std::mutex> lock(*m_taskCompletionMutexes[i]);
             m_taskCompletionConditions[i]->wait(lock, [this, i] {
                 return m_tasksInProgress[i]->load(std::memory_order_relaxed) == 0;
@@ -72,12 +72,19 @@ class ThreadPool {
         }
     }
 
+    void awaitWorker(int index) {
+        std::unique_lock<std::mutex> lock(*m_taskCompletionMutexes[index]);
+        m_taskCompletionConditions[index]->wait(lock, [this, index] {
+            return m_tasksInProgress[index]->load(std::memory_order_relaxed) == 0;
+        });
+    }
+
     void close() {
         {
             std::lock_guard<std::mutex> lock(m_runningMutex);
             isRunning = false;
         }
-        for (std::size_t i = 0; i < settings.workerCount + 1; ++i) {
+        for (std::size_t i = 0; i < settings.threadCount + 1; ++i) {
             m_queueConditions[i]->notify_all();
         }
         for (auto& thread : m_threads) {
@@ -99,8 +106,8 @@ class ThreadPool {
     std::vector<std::unique_ptr<std::condition_variable>> m_taskCompletionConditions;
 
     void worker(const int thread) {
-        // Optional: Set thread affinity if needed
         setAffinity(thread);
+        setPriority();
 
         while (true) {
             std::function<void()> task;
