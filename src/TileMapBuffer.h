@@ -33,6 +33,12 @@ void rebuild(TileMap& map,
              const ThreadSettings& threadSettings,
              const Positions& positions);
 
+void rebuildJob(TileMapBuffer& buffer,
+                ThreadPool& pool,
+                const WorldSettings& worldSettings,
+                const ThreadSettings& threadSettings,
+                const Positions& positions);
+
 void rebuildBuffer(AlignedInt32Vector& entityToTile,
                    const WorldSettings& worldSettings,
                    const Positions& positions,

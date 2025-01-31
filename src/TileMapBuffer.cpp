@@ -25,51 +25,62 @@ void rebuild(TileMap& map,
              const WorldSettings& worldSettings,
              const ThreadSettings& threadSettings,
              const Positions& positions) {
-    static Timer t;
-    t.begin();
 
     map.rebuildBuffer = !map.rebuildBuffer;
 
-    int threads = threadSettings.threadCount >> 1;
+    pool.enqueue(0,
+                 rebuildJob,
+                 std::ref(map.buffers[map.rebuildBuffer]),
+                 std::ref(pool),
+                 std::ref(worldSettings),
+                 std::ref(threadSettings),
+                 std::ref(positions));
+}
+
+void rebuildJob(TileMapBuffer& buffer,
+                ThreadPool& pool,
+                const WorldSettings& worldSettings,
+                const ThreadSettings& threadSettings,
+                const Positions& positions) {
+
+    int threads = (threadSettings.threadCount >> 1) - 1;
     int entitiesPerThread = worldSettings.entityCount / threads;
 
     for (int i = 0; i < threads; ++i) {
         int startEntity = i * entitiesPerThread;
         int endEntity = startEntity + entitiesPerThread;
-        // use lower half of threadpool
-        pool.enqueue(i,
+
+        int thread = i + 1;
+        pool.enqueue(thread,
                      rebuildBuffer,
-                     std::ref(map.buffers[map.rebuildBuffer].entityToTile),
+                     std::ref(buffer.entityToTile),
                      std::ref(worldSettings),
                      std::ref(positions),
                      startEntity,
                      endEntity);
 
-        // use upper half of threadpool
-        int thread = threads + i;
         pool.enqueue(thread,
                      resetEntityIds,
-                     std::ref(map.buffers[map.rebuildBuffer].entityIds),
+                     std::ref(buffer.entityIds),
                      startEntity,
                      endEntity);
     }
-    // use main core
-    std::fill(map.buffers[map.rebuildBuffer].tileStartindex.begin(), map.buffers[map.rebuildBuffer].tileStartindex.end(), -1);
-    std::fill(map.buffers[map.rebuildBuffer].tilesEntityCount.begin(), map.buffers[map.rebuildBuffer].tilesEntityCount.end(), 0);
+    // use main worker (0)
+    std::fill(buffer.tileStartindex.begin(), buffer.tileStartindex.end(), -1);
+    std::fill(buffer.tilesEntityCount.begin(), buffer.tilesEntityCount.end(), 0);
 
-    pool.await();
+    pool.awaitWorkers(1, threads);
 
-    pool.enqueue(0,
+    pool.enqueue(1,
                  count,
-                 std::ref(map.buffers[map.rebuildBuffer].entityToTile),
-                 std::ref(map.buffers[map.rebuildBuffer].tileStartindex),
-                 std::ref(map.buffers[map.rebuildBuffer].tilesEntityCount));
+                 std::ref(buffer.entityToTile),
+                 std::ref(buffer.tileStartindex),
+                 std::ref(buffer.tilesEntityCount));
 
-    pool.enqueue(0,
+    pool.enqueue(1,
                  setId,
-                 std::ref(map.buffers[map.rebuildBuffer]),
+                 std::ref(buffer),
                  worldSettings.entityCount);
-    // no await, let it rebuild for next frame.
 }
 
 #if defined(EMSCRIPTEN)
