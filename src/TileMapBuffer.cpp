@@ -65,7 +65,7 @@ void rebuildJob(TileMapBuffer& buffer,
                      startEntity,
                      endEntity);
     }
-    // use main worker (0)
+    // use main worker(0)
     std::fill(buffer.tileStartindex.begin(), buffer.tileStartindex.end(), -1);
     std::fill(buffer.tilesEntityCount.begin(), buffer.tilesEntityCount.end(), 0);
 
@@ -84,7 +84,7 @@ void rebuildJob(TileMapBuffer& buffer,
 }
 
 #if defined(EMSCRIPTEN)
-void rebuildBuffer(std::vector<int>& tiles,
+void rebuildBuffer(AlignedInt32Vector& entityToTile,
                    const WorldSettings& worldSettings,
                    const Positions& pos,
                    const int entityStart,
@@ -103,31 +103,22 @@ void rebuildBuffer(std::vector<int>& tiles,
 
     int entity = entityStart;
     for (; entity <= entityEnd - 4; entity += 4) {
-        // Log::info("\tEntity: " + std::to_string(entity));
         _mm_prefetch((const char*)&pos.x[entity + 8], _MM_HINT_T0);
         _mm_prefetch((const char*)&pos.y[entity + 8], _MM_HINT_T0);
 
-        // Log::info("\tPrefecth done!");
-
         xPosVec = _mm_load_ps(&pos.x[entity]);
         yPosVec = _mm_load_ps(&pos.y[entity]);
-        // Log::info("\tLoad done!");
 
         xMul = _mm_mul_ps(xPosVec, invTileWidthVec);
         yMul = _mm_mul_ps(yPosVec, invTileHeightVec);
-        // Log::info("\tMul done!");
 
         tileColVec = _mm_cvttps_epi32(xMul);
         tileRowVec = _mm_cvttps_epi32(yMul);
-        // Log::info("\tCast done!");
 
         tileRowMul = _mm_mullo_epi32(tileRowVec, worldColumnsVec);
         tileIndexVec = _mm_add_epi32(tileRowMul, tileColVec);
 
-        // Log::info("\tindex done!");
-
-        _mm_storeu_si128((__m128i*)&tiles[entity], tileIndexVec);
-        // Log::info("\tstore done!");
+        _mm_store_si128((__m128i*)&entityToTile[entity], tileIndexVec);
     }
 
     // reset id map
@@ -139,21 +130,37 @@ void rebuildBuffer(std::vector<int>& tiles,
         int tileCol = static_cast<int>(x / worldSettings.tileWidth);
         int tileRow = static_cast<int>(y / worldSettings.tileHeight);
 
-        tiles[entity] = tileRow * worldSettings.columns + tileCol;
+        entityToTile[entity] = tileRow * worldSettings.columns + tileCol;
     }
 }
 
-void resetEntityIds(const WorldSettings& worldSettings, std::vector<int>& entityIds) {
+void resetEntityIds(AlignedInt32Vector& entityIds,
+                    const int startEntity,
+                    const int endEntity) {
     __m128i sequence = _mm_setr_epi32(0, 1, 2, 3);
-    __m128i increment = _mm_set1_epi32(4);
+    __m128i increment = _mm_set1_epi32(8);
+    __m128i startOffset = _mm_set1_epi32(startEntity);
 
-    int entity = 0;
-    for (; entity < worldSettings.entityCount - 4; entity += 4) {
-        _mm_storeu_si128((__m128i*)&entityIds[entity], sequence);
+    sequence = _mm_add_epi32(sequence, startOffset);
+
+    int entity = startEntity;
+    for (; entity <= endEntity - 16; entity += 16) {
+        _mm_prefetch((const char*)&entityIds[entity + 32], _MM_HINT_T0);
+
+        _mm_store_si128((__m128i*)&entityIds[entity], sequence);
+        sequence = _mm_add_epi32(sequence, increment);
+
+        _mm_store_si128((__m128i*)&entityIds[entity + 4], sequence);
+        sequence = _mm_add_epi32(sequence, increment);
+
+        _mm_store_si128((__m128i*)&entityIds[entity + 8], sequence);
+        sequence = _mm_add_epi32(sequence, increment);
+
+        _mm_store_si128((__m128i*)&entityIds[entity + 12], sequence);
         sequence = _mm_add_epi32(sequence, increment);
     }
 
-    for (; entity < worldSettings.entityCount; ++entity) {
+    for (; entity < endEntity; ++entity) {
         entityIds[entity] = entity;
     }
 }
@@ -180,31 +187,22 @@ void rebuildBuffer(AlignedInt32Vector& entityToTiles,
 
     int entity = entityStart;
     for (; entity <= entityEnd - 8; entity += 8) {
-        // Log::info("\tEntity: " + std::to_string(entity));
         _mm_prefetch((const char*)&pos.x[entity + 16], _MM_HINT_T0);
         _mm_prefetch((const char*)&pos.y[entity + 16], _MM_HINT_T0);
 
-        // Log::info("\tPrefecth done!");
-
         xPosVec = _mm256_load_ps(&pos.x[entity]);
         yPosVec = _mm256_load_ps(&pos.y[entity]);
-        // Log::info("\tLoad done!");
 
         xMul = _mm256_mul_ps(xPosVec, invTileWidthVec);
         yMul = _mm256_mul_ps(yPosVec, invTileHeightVec);
-        // Log::info("\tMul done!");
 
         tileColVec = _mm256_cvttps_epi32(xMul);
         tileRowVec = _mm256_cvttps_epi32(yMul);
-        // Log::info("\tCast done!");
 
         tileRowMul = _mm256_mullo_epi32(tileRowVec, worldColumnsVec);
         tileIndexVec = _mm256_add_epi32(tileRowMul, tileColVec);
 
-        // Log::info("\tindex done!");
-
         _mm256_store_si256((__m256i*)&entityToTiles[entity], tileIndexVec);
-        // Log::info("\tstore done!");
     }
 
     // reset id map
@@ -328,10 +326,6 @@ void search(TileMapBuffer& buffer,
 
             int entityCount = buffer.tilesEntityCount[tileIndex];
             int startIndex = buffer.tileStartindex[tileIndex];
-
-            if (startIndex < 0 || entityCount == 0) {
-                continue;
-            }
 
             for (int i = 0; i < entityCount; ++i) {
                 int entityId = buffer.entityIds[startIndex + i];
