@@ -79,6 +79,18 @@ class ThreadPool {
         });
     }
 
+    int availableWorkers() {
+        int availableWorkers = 0;
+
+        for (size_t i = 0; i < m_threads.size(); ++i) {
+            if (m_taskQueues[i]->empty()) {
+                ++availableWorkers;
+            }
+        }
+
+        return availableWorkers;
+    }
+
     void close() {
         {
             std::lock_guard<std::mutex> lock(m_runningMutex);

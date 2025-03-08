@@ -28,13 +28,17 @@ Simulation::Simulation(WorldSettings& worldSettings,
 
     init(m_positions, m_worldSettings.entityCount);
     init(m_velocities, m_worldSettings.entityCount);
+    init(m_accelerations, m_worldSettings.entityCount);
 
     for (int i = 0; i < worldSettings.entityCount; ++i) {
         m_positions.x[i] = (float)GetRandomValue(0, worldSettings.worldWidth - 16);
         m_positions.y[i] = (float)GetRandomValue(0, worldSettings.worldHeight - 16);
 
-        m_velocities.x[i] = (float)GetRandomValue(-100.f, 100.f);
-        m_velocities.y[i] = (float)GetRandomValue(-100.f, 100.f);
+        m_velocities.x[i] = 0;
+        m_velocities.y[i] = 0;
+
+        m_accelerations.x[i] = (float)GetRandomValue(-100, 100) / 1000.f;
+        m_accelerations.y[i] = (float)GetRandomValue(-100, 100) / 1000.f;
     }
 
     init(m_tileMap, worldSettings.entityCount, worldSettings.tileCount);
@@ -106,6 +110,12 @@ void Simulation::update(float dt) {
            m_positions);
 
     // move system
+    applyAccelerations(m_threadPool,
+                       m_accelerations,
+                       m_velocities,
+                       m_threadSettings.threadCount,
+                       m_worldSettings.entityCount);
+
     applyVelocities(m_threadPool,
                     m_positions,
                     m_velocities,
@@ -113,6 +123,9 @@ void Simulation::update(float dt) {
                     m_worldSettings.worldWidth - 16.f,  // size
                     m_worldSettings.worldHeight - 16.f, // size
                     dt);
+
+    // await all workers before rendering
+    m_threadPool.await();
 }
 
 void Simulation::render() const {

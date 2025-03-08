@@ -12,6 +12,7 @@
 #include "TileMapBuffer.h"
 
 // components
+#include "Accelerations.h"
 #include "Positions.h"
 #include "Velocities.h"
 
@@ -49,6 +50,7 @@ class Simulation {
     // Components
     Positions m_positions;
     Velocities m_velocities;
+    Accelerations m_accelerations;
 
     // textures
     Texture2D m_circleTexture;

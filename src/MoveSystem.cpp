@@ -4,6 +4,10 @@
 
 #include "Log.h"
 
+///////////////////
+/// Velocities ///
+/////////////////
+
 void applyVelocities(ThreadPool& threadPool,
                      Positions& positions,
                      Velocities& velocities,
@@ -11,7 +15,6 @@ void applyVelocities(ThreadPool& threadPool,
                      const float worldWidth,
                      const float worldHeight,
                      float dt) {
-
     int threads = threadCount >> 1;
     int entitiesPerThread = positions.x.size() / threads;
 
@@ -19,7 +22,7 @@ void applyVelocities(ThreadPool& threadPool,
         int entitiesStart = i * entitiesPerThread;
         int entitiesEnd = entitiesStart + entitiesPerThread;
 
-        int thread = i + threads;
+        int thread = i; //+ threads;
         threadPool.enqueue(thread,
                            applyVelocitiesJob,
                            std::ref(positions.x),
@@ -116,5 +119,85 @@ void applyVelocitiesJob(AlignedFloatVector& pos,
         pos[entity] = std::max(0.0f, std::min(pos[entity], max));
     }
 }
+
+#endif
+
+//////////////////////
+/// Accelerations ///
+////////////////////
+
+void applyAccelerations(ThreadPool& threadPool,
+                        Accelerations& accelerations,
+                        Velocities& velocities,
+                        const int threadCount,
+                        const int entityCount) {
+    // TODO, when boid system is available,
+    int threads = threadCount >> 1;
+    int entitiesPerThread = entityCount / threads;
+
+    for (int i = 0; i < threads; ++i) {
+        int entitiesStart = i * entitiesPerThread;
+        int entitiesEnd = entitiesStart + entitiesPerThread;
+
+        int thread = i; // + threads;
+        threadPool.enqueue(thread,
+                           applyAccelerationsJob,
+                           std::ref(accelerations.x),
+                           std::ref(velocities.x),
+                           entitiesStart,
+                           entitiesEnd);
+
+        threadPool.enqueue(thread,
+                           applyAccelerationsJob,
+                           std::ref(accelerations.y),
+                           std::ref(velocities.y),
+                           entitiesStart,
+                           entitiesEnd);
+    }
+    threadPool.awaitWorkers(threads, threadCount - 1);
+}
+
+#if defined(EMSCRIPTEN)
+
+void applyAccelerationsJob(AlignedFloatVector& acc,
+                           AlignedFloatVector& vel,
+                           const int entitiesStart,
+                           const int entitiesEnd) {
+    //
+}
+
+#else
+void applyAccelerationsJob(AlignedFloatVector& acc,
+                           AlignedFloatVector& vel,
+                           const int entitiesStart,
+                           const int entitiesEnd) {
+    //
+    __m256 accelerationsVec;
+    __m256 velocitiesVec;
+    __m256 addedVec;
+    __m256 zeroVec = _mm256_set1_ps(0.f);
+
+    int entity = entitiesStart;
+
+    for (; entity <= entitiesEnd - 8; entity += 8) {
+        _mm_prefetch((const char*)&acc[entity + 16], _MM_HINT_T0);
+        _mm_prefetch((const char*)&vel[entity + 16], _MM_HINT_T0);
+
+        accelerationsVec = _mm256_load_ps(&acc[entity]);
+        velocitiesVec = _mm256_load_ps(&vel[entity]);
+
+        addedVec = _mm256_add_ps(accelerationsVec, velocitiesVec);
+
+        _mm256_store_ps(&vel[entity], addedVec);
+        //_mm256_store_ps(&acc[entity], zeroVec);
+    }
+
+    for (; entity < entitiesEnd; ++entity) {
+        vel[entity] += acc[entity];
+        // acc[entity] = 0.f;
+    }
+}
+
+////////////////////////////////////////////
 
 #endif

@@ -1,6 +1,7 @@
 #ifndef BOIDS_MOVE_SYSTEM_H
 #define BOIDS_MOVE_SYSTEM_H
 
+#include "Accelerations.h"
 #include "AlignedAllocator.h"
 #include "Positions.h"
 #include "ThreadPool.h"
@@ -20,5 +21,16 @@ void applyVelocitiesJob(AlignedFloatVector& pos,
                         const int entitiesEnd,
                         const float dt,
                         const float max);
+
+void applyAccelerations(ThreadPool& threadPool,
+                        Accelerations& accelerations,
+                        Velocities& velocities,
+                        const int threadCount,
+                        const int entityCount);
+
+void applyAccelerationsJob(AlignedFloatVector& acc,
+                           AlignedFloatVector& vel,
+                           const int entitiesStart,
+                           const int entitiesEnd);
 
 #endif
