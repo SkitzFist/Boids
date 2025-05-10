@@ -13,9 +13,9 @@
 
 #include "Tests/Test_ThreadPool.h"
 
-constexpr const int ENTITY_COUNT = 1000;
-constexpr const int COLUMNS = 2;
-constexpr const int ROWS = 2;
+constexpr const int ENTITY_COUNT = 1000000;
+constexpr const int COLUMNS = 50;
+constexpr const int ROWS = 50;
 constexpr const int TILE_SIZE = 1024;
 
 #if defined(PLATFORM_WEB)
@@ -90,6 +90,9 @@ int main() {
         init(threadSettings, worldSettings);
 
         ThreadPool threadPool(threadSettings);
+
+        setAffinity(threadSettings.threadCount);
+        setPriority();
 
         createViewPort(false);
         Simulation simulation(worldSettings, threadSettings, threadPool);

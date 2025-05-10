@@ -6,11 +6,15 @@
 
 #include "AlignedAllocator.h"
 
+// debug
+#include "Log.h"
+#include <Timer.h>
+
 void init(TileMap& map, const int entityCount, const int tileCount) noexcept {
     map.rebuildBuffer = true;
     for (int i = 0; i < 2; ++i) {
         map.buffers[i].entityIds.resize(entityCount);
-        map.buffers[i].tiles.resize(entityCount);
+        map.buffers[i].entityToTile.resize(entityCount);
         map.buffers[i].tileStartindex.resize(tileCount);
         map.buffers[i].tilesEntityCount.resize(tileCount);
     }
@@ -22,30 +26,69 @@ void rebuild(TileMap& map,
              const ThreadSettings& threadSettings,
              const Positions& positions) {
 
-    pool.awaitTileMap();
     map.rebuildBuffer = !map.rebuildBuffer;
 
-    // rebuildBuffer(map.buffers[map.rebuildBuffer].tiles, worldSettings, positions);
-    // resetEntityIds(worldSettings, map.buffers[map.rebuildBuffer].entityIds);
-    // countSort(map.buffers[map.rebuildBuffer]);
-
-    pool.enqueue(threadSettings.tileMapThread,
-                 rebuildBuffer,
-                 std::ref(map.buffers[map.rebuildBuffer].tiles),
+    pool.enqueue(0,
+                 rebuildJob,
+                 std::ref(map.buffers[map.rebuildBuffer]),
+                 std::ref(pool),
                  std::ref(worldSettings),
+                 std::ref(threadSettings),
                  std::ref(positions));
+}
 
-    pool.enqueue(threadSettings.tileMapThread,
-                 resetEntityIds, std::ref(worldSettings),
-                 std::ref(map.buffers[map.rebuildBuffer].entityIds));
+void rebuildJob(TileMapBuffer& buffer,
+                ThreadPool& pool,
+                const WorldSettings& worldSettings,
+                const ThreadSettings& threadSettings,
+                const Positions& positions) {
 
-    pool.enqueue(threadSettings.tileMapThread,
-                 countSort,
-                 std::ref(map.buffers[map.rebuildBuffer]));
+    int threads = (threadSettings.threadCount >> 1) - 1;
+    int entitiesPerThread = worldSettings.entityCount / threads;
+
+    for (int i = 0; i < threads; ++i) {
+        int startEntity = i * entitiesPerThread;
+        int endEntity = startEntity + entitiesPerThread;
+
+        int thread = i + 1;
+        pool.enqueue(thread,
+                     rebuildBuffer,
+                     std::ref(buffer.entityToTile),
+                     std::ref(worldSettings),
+                     std::ref(positions),
+                     startEntity,
+                     endEntity);
+
+        pool.enqueue(thread,
+                     resetEntityIds,
+                     std::ref(buffer.entityIds),
+                     startEntity,
+                     endEntity);
+    }
+    // use main worker(0)
+    std::fill(buffer.tileStartindex.begin(), buffer.tileStartindex.end(), -1);
+    std::fill(buffer.tilesEntityCount.begin(), buffer.tilesEntityCount.end(), 0);
+
+    pool.awaitWorkers(1, threads);
+
+    pool.enqueue(1,
+                 count,
+                 std::ref(buffer.entityToTile),
+                 std::ref(buffer.tileStartindex),
+                 std::ref(buffer.tilesEntityCount));
+
+    pool.enqueue(1,
+                 setId,
+                 std::ref(buffer),
+                 worldSettings.entityCount);
 }
 
 #if defined(EMSCRIPTEN)
-void rebuildBuffer(std::vector<int>& tiles, const WorldSettings& worldSettings, const Positions& pos) {
+void rebuildBuffer(AlignedInt32Vector& entityToTile,
+                   const WorldSettings& worldSettings,
+                   const Positions& pos,
+                   const int entityStart,
+                   const int entityEnd) {
     __m128i worldColumnsVec = _mm_set1_epi32(worldSettings.columns);
     __m128 invTileWidthVec = _mm_set1_ps(1.f / worldSettings.tileWidth);
     __m128 invTileHeightVec = _mm_set1_ps(1.f / worldSettings.tileHeight);
@@ -58,67 +101,77 @@ void rebuildBuffer(std::vector<int>& tiles, const WorldSettings& worldSettings, 
     __m128i tileRowMul;
     __m128i tileIndexVec;
 
-    int entity = 0;
-    for (; entity < worldSettings.entityCount - 4; entity += 4) {
-        // Log::info("\tEntity: " + std::to_string(entity));
+    int entity = entityStart;
+    for (; entity <= entityEnd - 4; entity += 4) {
         _mm_prefetch((const char*)&pos.x[entity + 8], _MM_HINT_T0);
         _mm_prefetch((const char*)&pos.y[entity + 8], _MM_HINT_T0);
 
-        // Log::info("\tPrefecth done!");
-
         xPosVec = _mm_load_ps(&pos.x[entity]);
         yPosVec = _mm_load_ps(&pos.y[entity]);
-        // Log::info("\tLoad done!");
 
         xMul = _mm_mul_ps(xPosVec, invTileWidthVec);
         yMul = _mm_mul_ps(yPosVec, invTileHeightVec);
-        // Log::info("\tMul done!");
 
         tileColVec = _mm_cvttps_epi32(xMul);
         tileRowVec = _mm_cvttps_epi32(yMul);
-        // Log::info("\tCast done!");
 
         tileRowMul = _mm_mullo_epi32(tileRowVec, worldColumnsVec);
         tileIndexVec = _mm_add_epi32(tileRowMul, tileColVec);
 
-        // Log::info("\tindex done!");
-
-        _mm_storeu_si128((__m128i*)&tiles[entity], tileIndexVec);
-        // Log::info("\tstore done!");
+        _mm_store_si128((__m128i*)&entityToTile[entity], tileIndexVec);
     }
 
     // reset id map
     //  Handle remaining elements
-    for (; entity < worldSettings.entityCount; ++entity) {
+    for (; entity <= entityEnd; ++entity) {
         float x = pos.x[entity];
         float y = pos.y[entity];
 
         int tileCol = static_cast<int>(x / worldSettings.tileWidth);
         int tileRow = static_cast<int>(y / worldSettings.tileHeight);
 
-        tiles[entity] = tileRow * worldSettings.columns + tileCol;
+        entityToTile[entity] = tileRow * worldSettings.columns + tileCol;
     }
 }
 
-void resetEntityIds(const WorldSettings& worldSettings, std::vector<int>& entityIds) {
+void resetEntityIds(AlignedInt32Vector& entityIds,
+                    const int startEntity,
+                    const int endEntity) {
     __m128i sequence = _mm_setr_epi32(0, 1, 2, 3);
-    __m128i increment = _mm_set1_epi32(4);
+    __m128i increment = _mm_set1_epi32(8);
+    __m128i startOffset = _mm_set1_epi32(startEntity);
 
-    int entity = 0;
-    for (; entity < worldSettings.entityCount - 4; entity += 4) {
-        _mm_storeu_si128((__m128i*)&entityIds[entity], sequence);
+    sequence = _mm_add_epi32(sequence, startOffset);
+
+    int entity = startEntity;
+    for (; entity <= endEntity - 16; entity += 16) {
+        _mm_prefetch((const char*)&entityIds[entity + 32], _MM_HINT_T0);
+
+        _mm_store_si128((__m128i*)&entityIds[entity], sequence);
+        sequence = _mm_add_epi32(sequence, increment);
+
+        _mm_store_si128((__m128i*)&entityIds[entity + 4], sequence);
+        sequence = _mm_add_epi32(sequence, increment);
+
+        _mm_store_si128((__m128i*)&entityIds[entity + 8], sequence);
+        sequence = _mm_add_epi32(sequence, increment);
+
+        _mm_store_si128((__m128i*)&entityIds[entity + 12], sequence);
         sequence = _mm_add_epi32(sequence, increment);
     }
 
-    for (; entity < worldSettings.entityCount; ++entity) {
+    for (; entity < endEntity; ++entity) {
         entityIds[entity] = entity;
     }
 }
 
 #else
 
-void rebuildBuffer(std::vector<int>& tiles, const WorldSettings& worldSettings, const Positions& pos) {
-    // Log::info("rebuild start");
+void rebuildBuffer(AlignedInt32Vector& entityToTiles,
+                   const WorldSettings& worldSettings,
+                   const Positions& pos,
+                   const int entityStart,
+                   const int entityEnd) {
     __m256i worldColumnsVec = _mm256_set1_epi32(worldSettings.columns);
     __m256 invTileWidthVec = _mm256_set1_ps(1.0f / worldSettings.tileWidth);
     __m256 invTileHeightVec = _mm256_set1_ps(1.0f / worldSettings.tileHeight);
@@ -132,106 +185,96 @@ void rebuildBuffer(std::vector<int>& tiles, const WorldSettings& worldSettings, 
     __m256i tileRowMul;
     __m256i tileIndexVec;
 
-    int entity = 0;
-    for (; entity < worldSettings.entityCount - 8; entity += 8) {
-        // Log::info("\tEntity: " + std::to_string(entity));
+    int entity = entityStart;
+    for (; entity <= entityEnd - 8; entity += 8) {
         _mm_prefetch((const char*)&pos.x[entity + 16], _MM_HINT_T0);
         _mm_prefetch((const char*)&pos.y[entity + 16], _MM_HINT_T0);
 
-        // Log::info("\tPrefecth done!");
-
         xPosVec = _mm256_load_ps(&pos.x[entity]);
         yPosVec = _mm256_load_ps(&pos.y[entity]);
-        // Log::info("\tLoad done!");
 
         xMul = _mm256_mul_ps(xPosVec, invTileWidthVec);
         yMul = _mm256_mul_ps(yPosVec, invTileHeightVec);
-        // Log::info("\tMul done!");
 
         tileColVec = _mm256_cvttps_epi32(xMul);
         tileRowVec = _mm256_cvttps_epi32(yMul);
-        // Log::info("\tCast done!");
 
         tileRowMul = _mm256_mullo_epi32(tileRowVec, worldColumnsVec);
         tileIndexVec = _mm256_add_epi32(tileRowMul, tileColVec);
 
-        // Log::info("\tindex done!");
-
-        _mm256_storeu_si256((__m256i*)&tiles[entity], tileIndexVec);
-        // Log::info("\tstore done!");
+        _mm256_store_si256((__m256i*)&entityToTiles[entity], tileIndexVec);
     }
 
     // reset id map
     //  Handle remaining elements
-    for (; entity < worldSettings.entityCount; ++entity) {
+    for (; entity < entityEnd; ++entity) {
         float x = pos.x[entity];
         float y = pos.y[entity];
 
         int tileCol = static_cast<int>(x / worldSettings.tileWidth);
         int tileRow = static_cast<int>(y / worldSettings.tileHeight);
 
-        tiles[entity] = tileRow * worldSettings.columns + tileCol;
+        entityToTiles[entity] = tileRow * worldSettings.columns + tileCol;
     }
 
     // Log::info("Rebuild done");
 }
 
-void resetEntityIds(const WorldSettings& worldSettings, std::vector<int>& entityIds) {
+void resetEntityIds(AlignedInt32Vector& entityIds,
+                    const int startEntity,
+                    const int endEntity) {
     __m256i sequence = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
     __m256i increment = _mm256_set1_epi32(8);
+    __m256i startOffset = _mm256_set1_epi32(startEntity);
 
-    int entity = 0;
-    for (; entity < worldSettings.entityCount - 8; entity += 8) {
-        _mm256_storeu_si256((__m256i*)&entityIds[entity], sequence);
+    sequence = _mm256_add_epi32(sequence, startOffset);
+
+    int entity = startEntity;
+    for (; entity <= endEntity - 32; entity += 32) {
+        _mm_prefetch((const char*)&entityIds[entity + 64], _MM_HINT_T0);
+
+        _mm256_store_si256((__m256i*)&entityIds[entity], sequence);
+        sequence = _mm256_add_epi32(sequence, increment);
+
+        _mm256_store_si256((__m256i*)&entityIds[entity + 8], sequence);
+        sequence = _mm256_add_epi32(sequence, increment);
+
+        _mm256_store_si256((__m256i*)&entityIds[entity + 16], sequence);
+        sequence = _mm256_add_epi32(sequence, increment);
+
+        _mm256_store_si256((__m256i*)&entityIds[entity + 32], sequence);
         sequence = _mm256_add_epi32(sequence, increment);
     }
 
-    for (; entity < worldSettings.entityCount; ++entity) {
+    for (; entity < endEntity; ++entity) {
         entityIds[entity] = entity;
     }
 }
 
 #endif
 
-/* Leaks memory on closing. Not sure what causes it though.
- Pretty sure it's a thread issue. The TileMapBuffer has gone out of scope.
-*/
-void countSort(TileMapBuffer& buffer) {
-
-    std::fill(buffer.tilesEntityCount.begin(), buffer.tilesEntityCount.end(), 0);
-    std::fill(buffer.tileStartindex.begin(), buffer.tileStartindex.end(), -1);
-
-    size_t n = buffer.tiles.size();
-    std::vector<size_t> count(n, 0);
-    for (size_t i = 0; i < n; ++i) {
-        ++count[buffer.tiles[i]];
-        ++buffer.tilesEntityCount[buffer.tiles[i]];
+void count(const AlignedInt32Vector& entityToTiles,
+           AlignedInt32Vector& tileStartindex,
+           AlignedInt32Vector& tilesEntityCount) {
+    for (size_t i = 0; i < entityToTiles.size(); ++i) {
+        ++tilesEntityCount[entityToTiles[i]];
     }
 
-    for (size_t val = 1; val < n; ++val) {
-        count[val] += count[val - 1];
-    }
-
-    std::vector<int> sortedTiles(n);
-    std::vector<int> sortedIds(n);
-
-    for (size_t i = n; i > 0; --i) {
-        uint16_t val = buffer.tiles[i - 1];
-        size_t pos = --count[val];
-        sortedTiles[pos] = val;
-        sortedIds[pos] = buffer.entityIds[i - 1];
-    }
-
-    buffer.tiles.swap(sortedTiles);
-    buffer.entityIds.swap(sortedIds);
-
-    // set tileStartIndex
     size_t currentIndex = 0;
-    for (size_t i = 0; i < buffer.tilesEntityCount.size(); ++i) {
-        if (buffer.tilesEntityCount[i] > 0) {
-            buffer.tileStartindex[i] = currentIndex;
+    for (size_t i = 0; i < tilesEntityCount.size(); ++i) {
+        if (tilesEntityCount[i] > 0) {
+            tileStartindex[i] = currentIndex;
         }
-        currentIndex += buffer.tilesEntityCount[i];
+        currentIndex += tilesEntityCount[i];
+    }
+}
+
+void setId(TileMapBuffer& buffer, int entityCount) {
+    AlignedInt32Vector currentTileIndex = buffer.tileStartindex;
+
+    for (int i = 0; i < entityCount; ++i) {
+        int tile = buffer.entityToTile[i];
+        buffer.entityIds[currentTileIndex[tile]++] = i;
     }
 }
 
@@ -239,7 +282,9 @@ void countSort(TileMapBuffer& buffer) {
 ///         Searching        ///
 ///////////////////////////////
 
-static inline bool IsColliding(const Rectangle rect, const float x, const float y) {
+static inline bool IsColliding(const Rectangle rect,
+                               const float x,
+                               const float y) {
     if (x < rect.x)
         return false;
 
@@ -255,7 +300,11 @@ static inline bool IsColliding(const Rectangle rect, const float x, const float 
     return true;
 }
 
-void search(TileMapBuffer& buffer, const Rectangle& area, std::vector<int>& result, const WorldSettings& worldSettings, const Positions& positions) {
+void search(TileMapBuffer& buffer,
+            const Rectangle& area,
+            std::vector<int>& result,
+            const WorldSettings& worldSettings,
+            const Positions& positions) {
 
     int startRow = static_cast<int>(std::floor(area.y / worldSettings.tileHeight));
     int endRow = static_cast<int>(std::ceil((area.y + area.height) / worldSettings.tileHeight));
@@ -277,10 +326,6 @@ void search(TileMapBuffer& buffer, const Rectangle& area, std::vector<int>& resu
 
             int entityCount = buffer.tilesEntityCount[tileIndex];
             int startIndex = buffer.tileStartindex[tileIndex];
-
-            if (startIndex < 0 || entityCount == 0) {
-                continue;
-            }
 
             for (int i = 0; i < entityCount; ++i) {
                 int entityId = buffer.entityIds[startIndex + i];
